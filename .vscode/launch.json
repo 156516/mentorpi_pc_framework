@@ -1,0 +1,68 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: debugpy attach to running container",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": "${input:debugpyPort}"
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}/modules",
+          "remoteRoot": "/workspace/src"
+        }
+      ],
+      "detail": "F1 → Dev Containers: Attach to Running Container → 容器内启动 `python3 -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m <entry>` → 在 VSCode F5 选此配置 attach"
+    },
+    {
+      "name": "Python: ros2 run (local debugpy, 需先 source 环境)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/modules/mentorpi_pc_monitor/mentorpi_pc_monitor/monitor_node.py",
+      "args": [],
+      "cwd": "${workspaceFolder}/modules/mentorpi_pc_monitor",
+      "console": "integratedTerminal",
+      "env": {
+        "ROS_DOMAIN_ID": "0",
+        "ROS_LOCALHOST_ONLY": "0",
+        "PYTHONPATH": "${workspaceFolder}/modules/mentorpi_pc_monitor/install/lib/python3.10/site-packages:/opt/ros/humble/lib/python3.10/site-packages",
+        "AMENT_PREFIX_PATH": "${workspaceFolder}/modules/mentorpi_pc_monitor/install"
+      },
+      "detail": "本地直接跑 Python 节点（不通过 docker），需要宿主已经 source /opt/ros/humble/setup.bash + colcon build 过"
+    },
+    {
+      "name": "C# GUI: run (local)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "dotnet build services/gui",
+      "program": "${workspaceFolder}/services/gui/bin/Debug/net8.0/mentorpi_pc_gui.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/services/gui",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "ROS_BRIDGE_URL": "ws://localhost:9090",
+        "ROS_DOMAIN_ID": "0",
+        "DISPLAY": "${env:DISPLAY}"
+      },
+      "detail": "本地跑 GUI（不在 docker 里），需要宿主 .NET 8 + rosbridge 容器在跑"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "debugpyPort",
+      "type": "promptString",
+      "description": "debugpy listen 端口（默认 5678）",
+      "default": "5678"
+    },
+    {
+      "id": "container",
+      "type": "promptString",
+      "description": "容器名 (e.g. mentorpi_monitor)"
+    }
+  ],
+  "compounds": []
+}

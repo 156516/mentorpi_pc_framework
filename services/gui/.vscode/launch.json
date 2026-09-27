@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GUI: dotnet run (宿主)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "dotnet build",
+      "program": "${workspaceFolder}/bin/Debug/net8.0/mentorpi_pc_gui.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal",
+      "env": {
+        "ROS_BRIDGE_URL": "ws://localhost:9090",
+        "ROS_DOMAIN_ID": "0",
+        "DISPLAY": "${env:DISPLAY}"
+      },
+      "detail": "在宿主直接跑 GUI（最快反馈）；需要 rosbridge 容器在跑 + 宿主 .NET 8 SDK"
+    },
+    {
+      "name": "GUI: attach to docker container",
+      "type": "coreclr",
+      "request": "attach",
+      "containerName": "mentorpi_gui",
+      "processName": "dotnet",
+      "detail": "F1 → Dev Containers: Attach to Running Container → 选 mentorpi_gui 后再用此配置断点调试容器内 GUI"
+    }
+  ]
+}

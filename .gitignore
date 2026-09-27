@@ -3,9 +3,15 @@ build/
 install/
 log/
 
-# IDE
-.vscode/
+# IDE — 提交项目级 .vscode/ 配置（tasks / launch / settings / extensions），
+# 个人状态（workspace.json / argv.json 等）依然忽略
 .idea/
+.vscode/argv.json
+.vscode/workspace.json
+
+# 但保留以下项目级配置（! 反向）
+!/.vscode/
+!/services/gui/.vscode/
 
 # 临时
 *.pyc

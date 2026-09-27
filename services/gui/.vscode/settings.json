@@ -1,0 +1,13 @@
+{
+  "_comment": "单独打开 services/gui/ 子项目时用的配置——dotnet build / dotnet run 直接在宿主跑，不需要 docker",
+  "files.associations": {
+    "*.axaml": "xaml",
+    "*.axaml.cs": "csharp"
+  },
+  "dotnet.defaultSolution": "Gui.csproj",
+  "[csharp]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "_comment_workflow": "VSCode 在宿主打开 ~/mentorpi_pc_framework/，代码编辑在宿主，build/run/debug 在 docker 容器",
+  "_comment_pylance_red": "Pylance 会报 import rclpy 红色 — 正常，rclpy 在容器里，attach 后自动消",
+
+  "python.defaultInterpreterPath": "/usr/bin/python3",
+  "python.analysis.autoSearchPaths": true,
+  "python.analysis.useLibraryCodeForTypes": true,
+
+  "ros.distro": "humble",
+
+  "files.associations": {
+    "*.msg": "rosmsg",
+    "*.srv": "rossrv",
+    "*.action": "rosaction",
+    "*.urdf": "xml",
+    "*.xacro": "xml"
+  },
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  "C_Cpp.default.cppStandard": "c++17",
+
+  "[python]": { "editor.tabSize": 4, "editor.insertSpaces": true },
+  "[xml]": { "editor.tabSize": 2, "editor.insertSpaces": true },
+
+  "editor.formatOnSave": false,
+  "editor.renderWhitespace": "boundary",
+  "editor.minimap.enabled": false
+}

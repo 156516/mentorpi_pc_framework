@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dotnet restore (国内镜像)",
+      "type": "shell",
+      "command": "dotnet restore Gui.csproj --source https://mirrors.huaweicloud.com/repository/nuget/v3/index.json",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "dotnet build",
+      "type": "shell",
+      "command": "dotnet build Gui.csproj -c Debug",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "dotnet run",
+      "type": "shell",
+      "command": "dotnet run --project Gui.csproj --no-build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "docker build GUI 镜像",
+      "type": "shell",
+      "command": "cd ${workspaceFolder}/../.. && docker compose --profile gui build mentorpi_pc_gui",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    }
+  ]
+}

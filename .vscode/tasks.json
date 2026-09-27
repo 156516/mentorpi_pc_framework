@@ -1,0 +1,93 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build base image",
+      "type": "shell",
+      "command": "docker build -t mentorpi_pc/ros2-base:latest -f base/ros2-humble.Dockerfile .",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "docker compose build",
+      "type": "shell",
+      "command": "docker compose build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "docker compose build (current module)",
+      "type": "shell",
+      "command": "bash -lc 'F=${file}; SVC=$(echo \"$F\" | sed -n \"s|.*/modules/\\([^/]*\\)/.*|\\1|p\"); if [ -z \"$SVC\" ]; then echo \"current file not under modules/\"; exit 1; fi; echo \"=== build module: $SVC ===\"; cd ${workspaceFolder} && docker compose build $SVC'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "docker compose up -d",
+      "type": "shell",
+      "command": "docker compose up -d",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "docker compose up -d (gui profile)",
+      "type": "shell",
+      "command": "xhost +local:docker >/dev/null 2>&1; docker compose --profile gui up -d gui",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "docker compose down",
+      "type": "shell",
+      "command": "docker compose down",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "docker compose logs (current module)",
+      "type": "shell",
+      "command": "bash -lc 'F=${file}; SVC=$(echo \"$F\" | sed -n \"s|.*/modules/\\([^/]*\\)/.*|\\1|p\"); if [ -z \"$SVC\" ]; then SVC=monitor; fi; docker compose logs -f --tail=50 $SVC'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "exec into module (bash)",
+      "type": "shell",
+      "command": "bash -lc 'F=${file}; SVC=$(echo \"$F\" | sed -n \"s|.*/modules/\\([^/]*\\)/.*|\\1|p\"); if [ -z \"$SVC\" ]; then SVC=monitor; fi; docker compose exec $SVC bash'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
+    },
+    {
+      "label": "dotnet build services/gui",
+      "type": "shell",
+      "command": "dotnet build services/gui/Gui.csproj -c Debug",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "dotnet run services/gui (宿主直接跑)",
+      "type": "shell",
+      "command": "dotnet run --project services/gui/Gui.csproj",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "docker build GUI 镜像 + 重启",
+      "type": "shell",
+      "command": "xhost +local:docker >/dev/null 2>&1; docker compose --profile gui build mentorpi_pc_gui && docker compose --profile gui up -d mentorpi_pc_gui && docker logs -f mentorpi_gui",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    }
+  ]
+}
