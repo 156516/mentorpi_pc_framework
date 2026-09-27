@@ -107,6 +107,22 @@ docker logs -f mentorpi_gui
 | 症状 | 排查 |
 |------|------|
 | 「连接失败」 | rosbridge 容器起了吗：`docker compose up -d rosbridge`；`docker logs mentorpi_rosbridge` |
-| 连上但没数据 | 树莓派 bringup 起了吗、话题有发布吗：`docker exec mentorpi_monitor bash -lc 'ros2 topic hz /odom'` |
+| 连上但没数据 | 树莓派 bringup 起了吗、话题有发布吗：`docker exec mentorpi_monitor bash -lc 'ros2 topic hz /odom'`；也可能是 QoS 不匹配（参考下面） |
 | restore 慢/失败 | 换国内镜像：`dotnet restore --source https://nuget.azure.cn/v3/index.json` |
 | 窗口起不来 | `xhost +local:docker`；`docker logs mentorpi_gui` 看 .NET 错误 |
+| `Default font family name can't be null or empty` | Avalonia 11.0 的 Inter 包空壳，**必须升 11.3.22**（`Gui.csproj` 已固定）。Docker 内 Linux 字体由 Dockerfile 装的 `fonts-wqy-microhei` 兜底 |
+
+### QoS 不匹配的坑（最常见的「连上但没数据」）
+
+`Services/RosService.cs` 里 `SubscribeAsync` 显式带 `qos.reliability = "reliable"`：
+
+```csharp
+await SendAsync(new {
+    op = "subscribe", topic, type,
+    qos = new { reliability = "reliable" },
+});
+```
+
+rosbridge 默认 best_effort，但 HiWonder 驱动节点（`ros_robot_controller` 等）用 RELIABLE 发布；不指定 reliable 就匹配不上，订阅端永远收不到消息，但 ws 连接看起来「正常」。
+
+**调试套路**：本地 `ros2 topic hz /odom` 看到数据 → GUI 不显示 → 八成是 QoS。检查 `SubscribeAsync` 是否有 `qos.reliability = "reliable"`。

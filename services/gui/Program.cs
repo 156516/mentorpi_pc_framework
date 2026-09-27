@@ -13,6 +13,7 @@ internal static class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // Avalonia.Fonts.Inter 11.3+ 内嵌 Inter.ttf，无需装系统字体
             .WithInterFont()
             .LogToTrace();
 }

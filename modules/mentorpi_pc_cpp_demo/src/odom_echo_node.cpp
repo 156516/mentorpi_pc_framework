@@ -41,7 +41,6 @@ private:
     {
         last_odom_ = *msg;
         have_odom_ = true;
-        int a = 3;
     }
 
     void print_state()

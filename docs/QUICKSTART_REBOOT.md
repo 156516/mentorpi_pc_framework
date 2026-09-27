@@ -111,8 +111,29 @@ docker exec mentorpi_monitor bash -lc \
 | 驱动报 `No such file or directory: '/dev/rrc'` | STM32 被识别成 ttyUSB 而非 ttyACM，udev 没建 /dev/rrc | 见 `SETUP_FROM_ZERO.md` 附录「串口设备名」|
 | 树莓派 ping 不通 | 热点没开 / PC 没连热点 | 重连 `HW-9E7168C4` |
 | `docker compose build` 卡在 restore | NuGet 源慢 | 已配国内镜像，耐心等或换源 |
+| GUI `dotnet run` 抛 `Default font family name can't be null or empty` | Avalonia 11.0 的 `Avalonia.Fonts.Inter` 包**没塞字体**，在 Linux 下崩 | `Gui.csproj` 升到 **11.3.22**（已升级），包里内嵌了 Inter.ttf |
 
 ---
+
+## 已修复的关键 Bug（升级记录）
+
+### 1. rosbridge 收不到 /odom /imu — QoS reliable 缺失
+
+**症状**：树莓派 bringup 起来，`ros2 topic hz /odom` 在 PC 端能看到 30Hz，但 GUI 连上 rosbridge 后电池 / 速度全是 0。
+
+**原因**：`services/gui/Services/RosService.cs` 之前 `subscribe` 没带 `qos.reliability=reliable`；rosbridge 默认 best_effort，但 HiWonder 驱动节点用 RELIABLE 发布，订阅端必须显式指定 reliable 才能匹配。
+
+**修复**：`SubscribeAsync` 加 `qos = new { reliability = "reliable" }`，参见 `services/gui/Services/RosService.cs:53-66`。
+
+**经验**：任何时候 rosbridge 收不到 native ROS 能看到的话题，先怀疑 QoS 不匹配。
+
+### 2. Avalonia 11.0 Inter 字体空壳
+
+**症状**：`dotnet run services/gui` 抛 `System.InvalidOperationException: Default font family name can't be null or empty`，窗口起不来。
+
+**原因**：NuGet 上 `Avalonia.Fonts.Inter` 11.0.0 包只有 5KB 的 DLL shim，**没有任何字体文件**——Avalonia 11.0 本身不内置默认字体。
+
+**修复**：升级到 **11.3.22**（Inter.ttf 内嵌进 DLL，宿主 / docker / Windows 都直接跑）。当前 `Gui.csproj` 已固定在 `11.3.22`。
 
 ## 完全关机再开机的顺序（记牢）
 

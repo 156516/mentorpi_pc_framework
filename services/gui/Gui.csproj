@@ -8,16 +8,21 @@
     <AssemblyName>mentorpi_pc_gui</AssemblyName>
     <RootNamespace>MentorpiPc.Gui</RootNamespace>
     <UseAvalonia>true</UseAvalonia>
-    <AvaloniaVersion>11.0.0</AvaloniaVersion>
+    <!--
+      11.3.x：11.0 系列的 Avalonia.Fonts.Inter 包只有空 DLL shim 没塞字体，
+      在 Linux 下会抛 "Default font family name can't be null or empty"。
+      11.3.22 把 Inter.ttf 内嵌进 Avalonia.Fonts.Inter.dll，dotnet run 宿主 + docker 都直接跑。
+    -->
+    <AvaloniaVersion>11.3.22</AvaloniaVersion>
     <ApplicationIcon />
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.0.0" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.0.0" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.0" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.0" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.0.0" />
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.22" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.0" />
     <!-- ROS2 客户端：直接用 rosbridge WebSocket 协议（不依赖原生 rcl，跨平台） -->
     <PackageReference Include="Websocket.Client" Version="5.5.1" />

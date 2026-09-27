@@ -79,6 +79,8 @@ class ObstacleNode(Node):
             'left':  SectorMin(name='left'),
             'right': SectorMin(name='right'),
         }
+        # 缓存最新 /odom；首次收到前为 None，避免后续扩展逻辑 AttributeError
+        self._latest_odom: Odometry | None = None
 
         period = 1.0 / max(print_hz, 0.1)
         self._timer = self.create_timer(period, self._print_status)
