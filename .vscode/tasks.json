@@ -26,6 +26,15 @@
       "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" }
     },
     {
+      "label": "🔁 build + up + logs (current module)",
+      "type": "shell",
+      "command": "bash -lc 'F=${file}; SVC=$(echo \"$F\" | sed -n \"s|.*/modules/\\([^/]*\\)/.*|\\1|p\"); if [ -z \"$SVC\" ]; then echo \"current file not under modules/\"; exit 1; fi; cd ${workspaceFolder} && docker compose build $SVC && docker compose up -d $SVC && docker compose logs -f --tail=30 $SVC'",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "clearPrevious": true, "panel": "shared" },
+      "detail": "改完代码后一键：build 当前模块 → 重启容器 → 跟日志（Ctrl+C 退出日志不杀容器）"
+    },
+    {
       "label": "docker compose up -d",
       "type": "shell",
       "command": "docker compose up -d",
