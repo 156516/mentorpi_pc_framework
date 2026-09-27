@@ -207,6 +207,7 @@ docker compose up my_cool_algo
 - `docs/MULTI_PC_COLLAB.md` —— 多台 PC 开发不同功能如何整合
 - `docs/ARCHITECTURE.md` —— 详细架构
 - `docs/QUICKSTART_FOR_DEVS.md` —— 5 分钟接入新算法模块
+- `docs/EXAMPLES.md` —— **完整端到端示例**：加 Python 节点 / 加 C++ 节点 / GUI 显示新话题（**15 分钟跑通一个完整 demo**）
 - `docs/DECISION_TREE.md` —— 30 秒速查「我现在想做什么」
 - `docs/VERIFY.md` —— 树莓派回来后端到端验证 checklist
 - `modules/_template/README.md` —— 新模块模板说明
