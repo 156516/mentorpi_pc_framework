@@ -8,6 +8,7 @@
 #   bash mentorpi.sh logs [模块] 跟日志（默认 monitor，Ctrl+C 退出）
 #   bash mentorpi.sh stop       停所有容器
 #   bash mentorpi.sh rebuild [模块] 强制重 build + 重启（不指定模块 = 全部）
+#   bash mentorpi.sh rebuild -w [模块] build 完自动跟日志（Ctrl+C 退出日志）
 #
 # 第一次跑 start 会自动 build base 镜像（~几分钟）
 
@@ -120,19 +121,42 @@ case "$cmd" in
         ;;
 
     rebuild)
-        TARGET="${2:-}"
+        # 解析参数: rebuild [-w|--watch] [模块名]
+        WATCH=0
+        TARGET=""
+        for arg in "${@:2}"; do
+            case "$arg" in
+                -w|--watch) WATCH=1 ;;
+                *)          TARGET="$arg" ;;
+            esac
+        done
+
+        # 自动从当前编辑文件识别模块（VSCode terminal 调用时 ${CWD} 是项目根，
+        # 但 ${file} 没法传给脚本——所以让用户在文件名里识别太麻烦，
+        # 这里只支持显式传参。如果不传，默认全部模块）
         if [[ -z "$TARGET" ]]; then
-            info "强制重 build 全部模块"
+            info "重 build 全部模块"
             docker compose build
             docker compose up -d
             ok "全部重 build 完成"
         else
             info "重 build 模块：$TARGET"
-            docker compose build "$TARGET"
+            if ! docker compose build "$TARGET"; then
+                err "build 失败，停止后续步骤"
+                exit 1
+            fi
             docker compose up -d "$TARGET"
             ok "$TARGET 已重 build + 重启"
         fi
-        info "看 logs: bash mentorpi.sh logs $TARGET"
+
+        if [[ $WATCH -eq 1 ]]; then
+            info "自动跟日志：$TARGET  (Ctrl+C 退出)"
+            docker compose logs -f --tail=30 "$TARGET"
+        else
+            echo ""
+            info "看 logs: bash mentorpi.sh logs $TARGET"
+            info "或加 -w 自动跟: bash mentorpi.sh rebuild -w $TARGET"
+        fi
         ;;
 
     *)
