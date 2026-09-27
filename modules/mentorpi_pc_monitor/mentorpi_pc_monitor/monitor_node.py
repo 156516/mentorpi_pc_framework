@@ -19,10 +19,11 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_system_default
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import BatteryState, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from std_msgs.msg import UInt16
 
 
 @dataclass
@@ -85,16 +86,26 @@ class MonitorNode(Node):
 
         self.state = RobotState()
 
-        # QoS: HiWonder 节点一般用 sensor_data 兼容，订阅端用同一个
+        # QoS: HiWonder 节点都用 RELIABLE 发布，订阅端必须显式 RELIABLE
+        # 否则 BEST_EFFORT（ros2 默认）匹配不上 → 收不到任何消息
+        reliable_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            depth=10,
+        )
+
+        # /ros_robot_controller/battery 在 HiWonder 镜像里是双类型 topic：
+        #   实际 publisher 发的是 std_msgs/UInt16（电量百分比 0~100）
+        #   但消息定义里也声明了 BatteryState 类型
+        # 必须用 UInt16 才能收到数据
         self.create_subscription(
-            BatteryState, '/ros_robot_controller/battery',
-            self._on_battery, qos_profile_system_default)
+            UInt16, '/ros_robot_controller/battery',
+            self._on_battery_pct, reliable_qos)
         self.create_subscription(
-            Imu, '/imu', self._on_imu, qos_profile_system_default)
+            Imu, '/imu', self._on_imu, reliable_qos)
         self.create_subscription(
-            Odometry, '/odom', self._on_odom, qos_profile_system_default)
+            Odometry, '/odom', self._on_odom, reliable_qos)
         self.create_subscription(
-            Twist, cmd_topic, self._on_cmd, qos_profile_system_default)
+            Twist, cmd_topic, self._on_cmd, reliable_qos)
 
         self._print_timer = self.create_timer(1.0 / max(print_hz, 0.1), self._print_status)
 
@@ -106,7 +117,28 @@ class MonitorNode(Node):
     def _stamp(self, name: str) -> None:
         self.state.last_topic_seen[name] = time.time()
 
+    def _on_battery_pct(self, msg: UInt16) -> None:
+        """HiWonder /ros_robot_controller/battery 实际发的是 UInt16，但 msg.data 的含义
+        在不同镜像里不一样。本镜像实测：raw ≈ 7948 ≈ 79.48%，即 **百分比 × 100**。
+        自动归一化策略（按 raw 大小）：
+          - 0~100      → 直接当百分比（0.0~100.0%）
+          - 100~10000  → 当百分比 ×100（如 7948 = 79.48%）
+        电压用 12V 铅酸经验估算：10.5V 截止、13.5V 满电。
+        """
+        raw = float(msg.data)
+        if raw <= 100.0:
+            pct = raw
+        elif raw <= 10000.0:
+            pct = raw / 100.0
+        else:
+            pct = min(100.0, raw / 1000.0)
+        voltage = 10.5 + (pct / 100.0) * (13.5 - 10.5)
+        self.state.battery_percentage = pct
+        self.state.battery_voltage = voltage
+        self._stamp('/battery')
+
     def _on_battery(self, msg: BatteryState) -> None:
+        """兼容老版本 / 用 BatteryState 的镜像。"""
         if msg.voltage is not None and msg.voltage > 0:
             self.state.battery_voltage = float(msg.voltage)
         if msg.percentage is not None and msg.percentage >= 0:

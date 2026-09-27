@@ -10,6 +10,12 @@ public sealed class BatteryState
     public double Percentage { get; set; }   // 0.0 ~ 1.0
 }
 
+// std_msgs/msg/UInt16 — HiWonder /ros_robot_controller/battery 实际发的类型
+public sealed class BatteryRaw
+{
+    public int Data { get; set; }
+}
+
 // nav_msgs/msg/Odometry（部分字段）
 public sealed class Odometry
 {

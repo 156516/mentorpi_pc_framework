@@ -28,8 +28,11 @@ public:
             cmd_topic, 10);
 
         // 收到 odom 才发——证明通路 OK
+        // HiWonder 节点用 RELIABLE 发布 /odom，订阅端必须显式 RELIABLE
+        auto reliable_qos = rclcpp::QoS(rclcpp::KeepLast(10))
+            .reliability(rclcpp::ReliabilityPolicy::Reliable);
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            "/odom", rclcpp::SystemDefaultsQoS(),
+            "/odom", reliable_qos,
             [this](const nav_msgs::msg::Odometry::SharedPtr) {
                 geometry_msgs::msg::Twist t;
                 t.linear.x  = this->get_parameter("linear_x").as_double();

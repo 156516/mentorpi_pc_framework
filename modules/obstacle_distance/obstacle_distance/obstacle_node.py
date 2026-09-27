@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_system_default
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 
@@ -65,14 +65,20 @@ class ObstacleNode(Node):
         print_hz = float(self.get_parameter('print_hz').value)
         self._safe_distance = float(self.get_parameter('safe_distance').value)
 
-        # 用 QoS sensor_data（树莓派 /scan 一般用这个）
+        # HiWonder 节点都用 RELIABLE 发布，订阅端必须显式 RELIABLE
+        # 否则 BEST_EFFORT 默认会匹配不上
+        reliable_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            depth=10,
+        )
+
         self._scan_sub = self.create_subscription(
-            LaserScan, scan_topic, self._on_scan, qos_profile_system_default)
+            LaserScan, scan_topic, self._on_scan, reliable_qos)
 
         # /odom 不订阅也行——只用 /scan 就够
         # 这里订阅是为了示例多话题
         self._odom_sub = self.create_subscription(
-            Odometry, odom_topic, self._on_odom, qos_profile_system_default)
+            Odometry, odom_topic, self._on_odom, reliable_qos)
 
         self._sectors = {
             'front': SectorMin(name='front'),

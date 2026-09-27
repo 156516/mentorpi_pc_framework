@@ -21,9 +21,13 @@ public:
         const auto odom_topic = this->get_parameter("odom_topic").as_string();
         const double print_hz = this->get_parameter("print_hz").as_double();
 
+        // HiWonder 节点用 RELIABLE 发布 /odom，订阅端必须显式 RELIABLE
+        // 否则 rclcpp::SystemDefaultsQoS（BEST_EFFORT）匹配不上 → 收不到
         using std::placeholders::_1;
+        auto reliable_qos = rclcpp::QoS(rclcpp::KeepLast(10))
+            .reliability(rclcpp::ReliabilityPolicy::Reliable);
         sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-            odom_topic, rclcpp::SystemDefaultsQoS(),
+            odom_topic, reliable_qos,
             std::bind(&OdomEchoNode::on_odom, this, _1));
 
         const auto period = std::chrono::duration<double>(1.0 / std::max(print_hz, 0.1));

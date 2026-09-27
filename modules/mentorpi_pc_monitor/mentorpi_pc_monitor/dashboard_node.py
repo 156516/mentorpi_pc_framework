@@ -16,10 +16,11 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_system_default
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import BatteryState, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from std_msgs.msg import UInt16
 
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QFont
@@ -151,15 +152,22 @@ class DashboardNode(Node):
 
         self.state = RobotState()
 
+        # HiWonder 节点用 RELIABLE 发布，订阅端必须显式 RELIABLE
+        reliable_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            depth=10,
+        )
+
+        # /ros_robot_controller/battery 实际发的是 std_msgs/UInt16（百分比 0~100）
         self.create_subscription(
-            BatteryState, '/ros_robot_controller/battery',
-            self._on_battery, qos_profile_system_default)
+            UInt16, '/ros_robot_controller/battery',
+            self._on_battery_pct, reliable_qos)
         self.create_subscription(
-            Imu, '/imu', self._on_imu, qos_profile_system_default)
+            Imu, '/imu', self._on_imu, reliable_qos)
         self.create_subscription(
-            Odometry, '/odom', self._on_odom, qos_profile_system_default)
+            Odometry, '/odom', self._on_odom, reliable_qos)
         self.create_subscription(
-            Twist, cmd_topic, self._on_cmd, qos_profile_system_default)
+            Twist, cmd_topic, self._on_cmd, reliable_qos)
 
         self.app = QApplication.instance() or QApplication(sys.argv)
         self.window = DashboardWindow(self.state)
@@ -172,6 +180,20 @@ class DashboardNode(Node):
         self._qt_timer.timeout.connect(self.window.update_view)
 
         self.get_logger().info('dashboard_node up — opening Qt window')
+
+    def _on_battery_pct(self, msg: UInt16):
+        """HiWonder /ros_robot_controller/battery 实际发 UInt16，本镜像实测
+        raw ≈ 7948 ≈ 79.48%，即 **百分比 × 100**。
+        """
+        raw = float(msg.data)
+        if raw <= 100.0:
+            pct = raw
+        elif raw <= 10000.0:
+            pct = raw / 100.0
+        else:
+            pct = min(100.0, raw / 1000.0)
+        self.state.battery_percentage = pct
+        self.state.battery_voltage = 10.5 + (pct / 100.0) * (13.5 - 10.5)
 
     def _on_battery(self, msg):
         if msg.voltage and msg.voltage > 0:

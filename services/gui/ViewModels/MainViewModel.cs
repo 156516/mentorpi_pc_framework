@@ -47,13 +47,18 @@ public partial class MainViewModel : ObservableObject
 
     private async Task SubscribeTopicsAsync()
     {
-        await _ros.SubscribeAsync<BatteryState>(
-            "/ros_robot_controller/battery", "sensor_msgs/msg/BatteryState", msg =>
+        // /ros_robot_controller/battery 实际发 std_msgs/UInt16（百分比 × 100，如 7948 = 79.48%）
+        // HiWonder 12V 铅酸经验估算：10.5V 截止、13.5V 满电
+        await _ros.SubscribeAsync<BatteryRaw>(
+            "/ros_robot_controller/battery", "std_msgs/msg/UInt16", msg =>
         {
-            if (!double.IsNaN(msg.Voltage))
-                BatteryVoltage = msg.Voltage;
-            if (!double.IsNaN(msg.Percentage))
-                BatteryPercentage = msg.Percentage * 100.0;
+            double raw = msg.Data;
+            double pct;
+            if (raw <= 100.0) pct = raw;
+            else if (raw <= 10000.0) pct = raw / 100.0;
+            else pct = Math.Min(100.0, raw / 1000.0);
+            BatteryVoltage = 10.5 + (pct / 100.0) * (13.5 - 10.5);
+            BatteryPercentage = pct;
         });
 
         await _ros.SubscribeAsync<Odometry>(
