@@ -135,6 +135,29 @@ docker exec mentorpi_monitor bash -lc \
 
 **修复**：升级到 **11.3.22**（Inter.ttf 内嵌进 DLL，宿主 / docker / Windows 都直接跑）。当前 `Gui.csproj` 已固定在 `11.3.22`。
 
+### 3. PC 端 native ROS 节点也收不到 /odom /imu /battery — QoS 不匹配
+
+**症状**：`ros2 topic hz /odom` 在 PC 端能直接看到 30Hz，但 `mentorpi_monitor` 容器里的 monitor_node 一直 `topics: --` 或只偶尔出现 fresh。
+
+**原因**：HiWonder 树莓派端所有 ROS 节点都用 **RELIABLE** 发布话题，但 ROS2 默认订阅端是 **BEST_EFFORT**——QoS 不匹配，订阅端永远收不到。
+
+**修复**：
+- Python 节点（`monitor_node.py` / `dashboard_node.py` / `obstacle_node.py`）：用 `QoSProfile(reliability=ReliabilityPolicy.RELIABLE, depth=10)`
+- C++ 节点（`odom_echo_node.cpp` / `odom_pub_node.cpp`）：用 `rclcpp::QoS(KeepLast(10)).reliability(rclcpp::ReliabilityPolicy::Reliable)`
+
+**经验**：所有 HiWonder ROS 节点都用 RELIABLE，订阅端必须显式 RELIABLE 才行。这是上面 rosbridge 那条的全链路延伸——native ROS → rosbridge → GUI 三段都要靠 RELIABLE 串起来。
+
+### 4. /ros_robot_controller/battery 实际发的是 std_msgs/UInt16，不是 BatteryState
+
+**症状**：mentorpi_monitor 一直 `bat=-- --`，明明 `ros2 topic info` 能看到 publisher。
+
+**原因**：HiWonder 镜像里这个 topic 是**双类型**（BatteryState + UInt16），但**实际 publisher 发的是 UInt16**，`msg.data` 又是**百分比 × 100**（如 7948 = 79.48%），不是字面电压。
+
+**修复**：
+- 订阅端类型改成 `std_msgs/UInt16`
+- 自动归一化 raw 数值：`0~100` 当百分比、`100~10000` 当百分比 × 100、`> 10000` 当 mV
+- 12V 铅酸经验估算电压：10.5V 截止 → 13.5V 满电
+
 ## 完全关机再开机的顺序（记牢）
 
 1. **开**：热点 → 树莓派（听滴声）→ PC 容器 → GUI
