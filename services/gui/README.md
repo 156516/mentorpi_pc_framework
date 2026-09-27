@@ -40,27 +40,18 @@ GUI (Avalonia, C#)
 
 ---
 
-## 本地开发（宿主 .NET 8 SDK）
+## 开发 / 运行
 
 ```bash
-cd ~/mentorpi_pc_framework/services/gui
+# 打开 GUI 子项目
+code ~/mentorpi_pc_framework/services/gui
 
-# 用国内镜像 restore
-dotnet restore Gui.csproj --source https://nuget.azure.cn/v3/index.json
-dotnet build Gui.csproj
-
-# 跑（需要先起 rosbridge：docker compose up -d rosbridge）
+# 宿主直接跑（最快反馈；F5 也走这个）
 dotnet run
-```
 
-## Docker 跑
-
-```bash
-cd ~/mentorpi_pc_framework
-xhost +local:docker
-docker compose --profile gui build mentorpi_pc_gui
-docker compose --profile gui up -d mentorpi_pc_gui
-docker logs -f mentorpi_gui
+# 或 docker 起
+bash ~/mentorpi_pc_framework/mentorpi.sh rebuild -w mentorpi_pc_gui
+bash ~/mentorpi_pc_framework/mentorpi.sh gui
 ```
 
 ---
@@ -98,7 +89,9 @@ docker logs -f mentorpi_gui
    });
    ```
 4. 在 `MainWindow.axaml` 加一个 `TextBlock` 绑定 `MyProp`。
-5. `dotnet build` 通过后 `docker compose --profile gui build mentorpi_pc_gui`。
+5. `dotnet build` 通过后 `bash mentorpi.sh rebuild -w mentorpi_pc_gui`。
+
+完整端到端示例（Python/C++/GUI 三种）见 `docs/EXAMPLES.md`。
 
 ---
 
@@ -106,23 +99,11 @@ docker logs -f mentorpi_gui
 
 | 症状 | 排查 |
 |------|------|
-| 「连接失败」 | rosbridge 容器起了吗：`docker compose up -d rosbridge`；`docker logs mentorpi_rosbridge` |
-| 连上但没数据 | 树莓派 bringup 起了吗、话题有发布吗：`docker exec mentorpi_monitor bash -lc 'ros2 topic hz /odom'`；也可能是 QoS 不匹配（参考下面） |
+| 「连接失败」 | rosbridge 容器起了吗：`bash mentorpi.sh status` |
+| 连上但没数据 | QoS 不匹配（见 `docs/QUICKSTART_REBOOT.md` 已修 Bug #1）；也可能是订阅类型不对 |
 | restore 慢/失败 | 换国内镜像：`dotnet restore --source https://nuget.azure.cn/v3/index.json` |
 | 窗口起不来 | `xhost +local:docker`；`docker logs mentorpi_gui` 看 .NET 错误 |
-| `Default font family name can't be null or empty` | Avalonia 11.0 的 Inter 包空壳，**必须升 11.3.22**（`Gui.csproj` 已固定）。Docker 内 Linux 字体由 Dockerfile 装的 `fonts-wqy-microhei` 兜底 |
+| `Default font family name can't be null or empty` | Avalonia 11.0 的 Inter 包空壳，**必须升 11.3.22**（`Gui.csproj` 已固定） |
+| XAML Previewer 报 `SIGABRT` | Linux SkiaSharp 不稳，关掉：`services/gui/.vscode/settings.json` 已设 `avalonia-xaml.enablePreviewer: false`，改用 `dotnet run` 弹窗 |
 
-### QoS 不匹配的坑（最常见的「连上但没数据」）
-
-`Services/RosService.cs` 里 `SubscribeAsync` 显式带 `qos.reliability = "reliable"`：
-
-```csharp
-await SendAsync(new {
-    op = "subscribe", topic, type,
-    qos = new { reliability = "reliable" },
-});
-```
-
-rosbridge 默认 best_effort，但 HiWonder 驱动节点（`ros_robot_controller` 等）用 RELIABLE 发布；不指定 reliable 就匹配不上，订阅端永远收不到消息，但 ws 连接看起来「正常」。
-
-**调试套路**：本地 `ros2 topic hz /odom` 看到数据 → GUI 不显示 → 八成是 QoS。检查 `SubscribeAsync` 是否有 `qos.reliability = "reliable"`。
+详细故障排查 + 已修 Bug 见 `docs/QUICKSTART_REBOOT.md` 的「常见坑」和「已修复的关键 Bug」。

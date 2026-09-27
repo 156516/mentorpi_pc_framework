@@ -206,5 +206,4 @@ docker compose up my_cool_algo
 - `docs/SETUP_FROM_ZERO.md` —— Ubuntu 24.04 从 0 搭建整套环境（一次性）
 - `docs/EXAMPLES.md` —— **完整端到端示例**：加 Python 节点 / 加 C++ 节点 / GUI 显示新话题（15 分钟跑通一个 demo）
 - `docs/ARCHITECTURE.md` —— 架构详解
-- `modules/_template/README.md` —— 新模块模板说明
-- `services/gui/README.md` —— GUI 开发指南
+- `services/gui/README.md` —— GUI 开发指南（rosbridge 协议 + 加新话题步骤）
