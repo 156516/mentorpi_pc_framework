@@ -1,14 +1,14 @@
 # 重启后快速开始（编译 / 运行代码）
 
 > 适用：框架已经按 `SETUP_FROM_ZERO.md` 搭好，之后每次电脑重启 / 树莓派重启后，怎么最快恢复开发。
-> 目标：3 分钟内恢复到「能编译、能跑、能看数据」。
+> 目标：**3 分钟内恢复到「能编译、能跑、能看数据」**。
 
 ---
 
 ## 一句话流程
 
 ```
-连热点 → 树莓派上电(听"滴"声) → docker compose up -d → 改代码 → build → up → 看日志
+连热点 → 树莓派上电(听"滴"声) → bash mentorpi.sh start → bash mentorpi.sh gui → 改代码 → bash mentorpi.sh rebuild -w <模块>
 ```
 
 ---
@@ -35,69 +35,136 @@ ping -c 2 192.168.149.1   # 应该 0% 丢包
 
 ---
 
-## 第 2 步：起 PC 端容器
+## 第 2 步：起 PC 端容器（一键脚本）
+
+`~/mentorpi_pc_framework/mentorpi.sh` 是项目根目录的统一管理脚本，覆盖所有常用操作：
 
 ```bash
 cd ~/mentorpi_pc_framework
-docker compose up -d
-docker compose ps          # 看所有模块状态，应该都是 Up
+bash mentorpi.sh start    # 起 4 个核心容器 + 验证数据流
+bash mentorpi.sh gui      # 起 GUI 控制台
 ```
 
-默认起：`monitor` / `cpp_demo` / `obstacle_distance` / `rosbridge`。
-`description`（URDF/RViz）和 `gui` 默认不起，按需单独起。
+`start` 干了 4 件事：
 
-### 起 GUI 控制台（看数据的面板）
+- 自动 build base 镜像（如果没 build 过）
+- 起 `monitor` / `cpp_demo` / `obstacle` / `rosbridge` 4 个容器
+- 等 5 秒让节点连上 DDS
+- 看 `monitor` 日志，自动判断数据流是否 `fresh`
 
-```bash
-bash ~/mentorpi_pc_framework/start_gui.sh
+输出示例：
+
 ```
-
-窗口弹出后点左上角**「连接」**，显示电池 / 速度 / IMU。
+>>> 起 4 个核心容器 (monitor / cpp_demo / obstacle / rosbridge)
+✓ 数据流通：topics: /odom=fresh, /imu=fresh, /battery=fresh
+下一步：bash mentorpi.sh gui    (起 GUI 控制台)
+```
 
 ---
 
-## 第 3 步：编译运行你的代码
-
-框架里每个功能模块 = 一个独立容器，改哪个就重编哪个。
+## 第 3 步：起 GUI 控制台
 
 ```bash
-cd ~/mentorpi_pc_framework
-
-# 改完代码（比如 modules/mentorpi_pc_monitor/.../monitor_node.py）后：
-docker compose build mentorpi_pc_monitor    # 只重编这一个模块
-docker compose up -d mentorpi_pc_monitor     # 用新镜像重启它
-
-# 看它日志（确认起来 + 数据流）
-docker compose logs -f mentorpi_pc_monitor
+bash mentorpi.sh gui
 ```
 
-| 模块 | compose 服务名 | 容器名 | 语言 |
-|------|--------------|--------|------|
-| 监控节点 | `mentorpi_pc_monitor` | `mentorpi_monitor` | Python |
-| C++ 演示 | `mentorpi_pc_cpp_demo` | `mentorpi_cpp_demo` | C++ |
-| 障碍物距离 | `obstacle_distance` | `mentorpi_obstacle` | Python |
-| WebSocket 桥 | `rosbridge` | `mentorpi_rosbridge` | 无需改 |
-| GUI 控制台 | `mentorpi_pc_gui` | `mentorpi_gui` | C# |
-| URDF/描述 | `mentorpi_description` | `mentorpi_description` | 按需 |
-
-**改 C++ 模块**：同上，但 `build` 会慢一点（要 cmake + colcon，~几十秒）。
-**改 GUI**：`docker compose --profile gui build mentorpi_pc_gui`，再 `start_gui.sh`。
+- 自动跑 `xhost +local:docker`（第一次需要）
+- 起 GUI 容器
+- 窗口弹出后点左上角**「连接」**，显示电池 / 速度 / IMU
 
 ---
 
-## 第 4 步：验证数据通了
+## 第 4 步：改代码 + build + 看日志
+
+### 模块名 cheat sheet
+
+| 你想改的语言 / 文件位置 | 服务名 (给 `mentorpi.sh rebuild` 用) | 容器名 (`docker ps` 看) |
+|---------|------------------------|---------|
+| Python: `modules/mentorpi_pc_monitor/.../monitor_node.py` | `mentorpi_pc_monitor` | `mentorpi_monitor` |
+| Python: `modules/obstacle_distance/.../obstacle_node.py` | `obstacle_distance` | `mentorpi_obstacle` |
+| **C++**: `modules/mentorpi_pc_cpp_demo/src/*.cpp` | `mentorpi_pc_cpp_demo` | `mentorpi_cpp_demo` |
+| **C#**: `services/gui/*.cs` / `*.axaml` | `mentorpi_pc_gui` | `mentorpi_gui` |
+| WebSocket 桥 / rosbridge | `rosbridge` | `mentorpi_rosbridge`（无需改）|
+| URDF / RViz | `mentorpi_description` | `mentorpi_description`（按需）|
+
+### 改完代码，一条命令搞定
 
 ```bash
-# 看 monitor 日志，最后一行 topics: ... 后面出现 fresh 就是收到数据了
+# Python 节点
+bash mentorpi.sh rebuild -w mentorpi_pc_monitor
+
+# C++ 节点
+bash mentorpi.sh rebuild -w mentorpi_pc_cpp_demo
+
+# GUI（C#）—— 更快的选择：跳过 docker，宿主直接跑（见下方"GUI 特殊路径"）
+bash mentorpi.sh rebuild -w mentorpi_pc_gui
+```
+
+`-w` 含义：**build + 重启容器 + 自动接 `docker compose logs -f`**，按 `Ctrl+C` 退出日志（容器继续跑）。
+
+不带 `-w` 就是 build + 重启不跟日志，自己 `bash mentorpi.sh logs <模块>`。
+
+---
+
+### GUI 特殊路径（最快反馈）
+
+C# GUI 在宿主的 .NET 8 SDK 直接跑，不用每次 docker build：
+
+```bash
+cd ~/mentorpi_pc_framework/services/gui
+dotnet run       # build + 弹窗
+```
+
+或者 VSCode 里 `F5` → 选 `GUI: dotnet run (宿主)`。
+
+要发布 docker 镜像才用 `mentorpi.sh rebuild -w mentorpi_pc_gui`。
+
+---
+
+## 第 5 步：验证数据通了
+
+```bash
+# 看 monitor 日志（最近一行）
 docker logs --tail 3 mentorpi_monitor
-# 期望：topics: /odom=fresh /imu=fresh /battery=fresh ...
+# 期望最后一行：topics: /odom=fresh /imu=fresh /battery=fresh
 
-# 或直接测话题发布频率（在 monitor 容器里）
+# 看话题发布频率（在 monitor 容器里）
 docker exec mentorpi_monitor bash -lc \
   'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && ros2 topic hz /odom'
+
+# 一眼看清所有状态
+bash mentorpi.sh status
 ```
 
 `/odom` 应该 ~30 Hz。`/imu` `/battery` 有数据说明树莓派 STM32 也正常。
+
+---
+
+## VSCode 工作流
+
+打开项目：
+
+```bash
+code ~/mentorpi_pc_framework                # 顶层（Python/C++/所有模块）
+code ~/mentorpi_pc_framework/services/gui   # GUI 子项目（dotnet 智能提示更好）
+```
+
+改完代码，**两种方式 build**：
+
+### 方式 A：VSCode Tasks（推荐）
+
+`Ctrl+Shift+P` → `Tasks: Run Task` → 选：
+
+| Task 标签 | 干什么 |
+|----------|------|
+| **`🔁 build + up + logs (current module)`** | 自动识别当前打开的文件所属模块，build + 重启 + 跟日志 |
+| `docker compose build (current module)` | 只 build |
+| `docker compose logs (current module)` | 只跟日志 |
+| `dotnet run services/gui (宿主直接跑)` | GUI 宿主跑（最快反馈）|
+
+### 方式 B：终端
+
+`Ctrl+`` 开终端，输上面的 `mentorpi.sh rebuild -w <模块名>`。
 
 ---
 
@@ -106,12 +173,13 @@ docker exec mentorpi_monitor bash -lc \
 | 现象 | 原因 | 修法 |
 |------|------|------|
 | GUI 连上了但数据全 0 | rosbridge 容器跑久了内部线程卡死 | `docker compose restart rosbridge`，重连 |
-| 收不到话题数据 | QoS 不匹配（订阅端必须 reliable） | 代码里订阅用 `qos_profile_system_default`（已默认）|
+| 收不到话题数据 | QoS 不匹配（订阅端必须 reliable） | 已修：所有节点都用 `QoSProfile(reliability=ReliabilityPolicy.RELIABLE)` |
 | `/odom` 有、`/imu` `/battery` 没 | 树莓派 STM32 没正常起（没「滴」声）| 树莓派重新上电，听滴声 |
 | 驱动报 `No such file or directory: '/dev/rrc'` | STM32 被识别成 ttyUSB 而非 ttyACM，udev 没建 /dev/rrc | 见 `SETUP_FROM_ZERO.md` 附录「串口设备名」|
 | 树莓派 ping 不通 | 热点没开 / PC 没连热点 | 重连 `HW-9E7168C4` |
 | `docker compose build` 卡在 restore | NuGet 源慢 | 已配国内镜像，耐心等或换源 |
-| GUI `dotnet run` 抛 `Default font family name can't be null or empty` | Avalonia 11.0 的 `Avalonia.Fonts.Inter` 包**没塞字体**，在 Linux 下崩 | `Gui.csproj` 升到 **11.3.22**（已升级），包里内嵌了 Inter.ttf |
+| GUI `dotnet run` 抛 `Default font family name can't be null or empty` | Avalonia 11.0 的 `Avalonia.Fonts.Inter` 包**没塞字体**，在 Linux 下崩 | `Gui.csproj` 升到 **11.3.22**（已升级） |
+| monitor `bat=12.88V 79.45%` 显示奇怪 | /battery 实际发 `UInt16`，raw 是百分比 ×100 | 已修，自动归一化（见下面 Bug #4）|
 
 ---
 
@@ -158,12 +226,36 @@ docker exec mentorpi_monitor bash -lc \
 - 自动归一化 raw 数值：`0~100` 当百分比、`100~10000` 当百分比 × 100、`> 10000` 当 mV
 - 12V 铅酸经验估算电压：10.5V 截止 → 13.5V 满电
 
+---
+
 ## 完全关机再开机的顺序（记牢）
 
-1. **开**：热点 → 树莓派（听滴声）→ PC 容器 → GUI
-2. **关**：`docker compose down` → 关 PC → 树莓派断电
+1. **开**：开热点 → 树莓派（听滴声）→ `bash mentorpi.sh start` → `bash mentorpi.sh gui`
+2. **关**：`bash mentorpi.sh stop` → 关 VSCode → 关 PC → 拔树莓派电（**最后拔！**）
+
+```bash
+# 关机命令
+bash mentorpi.sh stop
+```
+
+---
 
 ## 常用命令速记
+
+### 一键脚本（推荐）
+
+```bash
+bash mentorpi.sh start                     # 起 4 个核心容器 + 验证数据流
+bash mentorpi.sh gui                       # 起 GUI
+bash mentorpi.sh status                    # 一眼看所有状态
+bash mentorpi.sh logs [模块]               # 跟日志（默认 monitor）
+bash mentorpi.sh rebuild [模块]            # 重 build + 重启
+bash mentorpi.sh rebuild -w [模块]         # 重 build + 重启 + 自动跟日志
+bash mentorpi.sh stop                      # 停所有容器
+bash mentorpi.sh rebuild                   # 重 build 全部
+```
+
+### 底层 docker 命令（备用）
 
 ```bash
 docker compose ps                        # 看所有容器状态
@@ -172,4 +264,42 @@ docker compose build <服务名>            # 重编一个模块
 docker compose up -d <服务名>            # 重启一个模块
 docker compose restart rosbridge         # 数据全 0 时的第一招
 docker exec -it <容器名> bash            # 进容器调试
+```
+
+---
+
+## 加新算法模块
+
+参见 `modules/_template/README.md`。
+
+10 分钟接入：
+
+```bash
+# 1. 拷模板
+cp -r modules/_template modules/my_cool_algo
+
+# 2. 改名（_template → my_cool_algo）
+cd modules/my_cool_algo
+mv _template my_cool_algo  # 嵌套目录重命名
+mv resource/_template resource/my_cool_algo
+mv my_cool_algo/_template my_cool_algo/__init__.py 2>/dev/null
+
+# 3. 改 package.xml / setup.py 里的 my_cool_algo
+sed -i 's/my_cool_algo/你的包名/g' package.xml setup.py setup.cfg
+
+# 4. 写节点代码
+# modules/my_cool_algo/my_cool_algo/my_node.py
+
+# 5. 注册到 setup.py 的 entry_points
+
+# 6. 加进 docker-compose.yml:
+#   my_cool_algo:
+#     build:
+#       context: .
+#       dockerfile: modules/my_cool_algo/Dockerfile
+#     network_mode: host
+#     environment: [ROS_DOMAIN_ID=0]
+
+# 7. 启动
+bash mentorpi.sh rebuild -w my_cool_algo
 ```
