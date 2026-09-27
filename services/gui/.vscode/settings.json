@@ -9,5 +9,8 @@
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
     "editor.formatOnSave": false
-  }
+  },
+  "_comment_previewer": "XAML Previewer 在 Linux 下经常 SIGABRT（SkiaSharp + Avalonia 渲染层 headless 不稳）。关掉它，改用 'dotnet run' 弹窗看实际效果——更准也更快",
+  "avalonia-xaml.enablePreviewer": false,
+  "avalonia-xaml.autoShowPreviewer": false
 }
