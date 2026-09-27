@@ -303,3 +303,154 @@ sed -i 's/my_cool_algo/你的包名/g' package.xml setup.py setup.cfg
 # 7. 启动
 bash mentorpi.sh rebuild -w my_cool_algo
 ```
+
+### 订阅 / 发布话题示例
+
+常用话题（树莓派 bringup 自动发布）：
+
+| 话题 | 类型 | 用途 |
+|------|------|------|
+| `/odom` | `nav_msgs/Odometry` | 里程计（位置 + 速度）|
+| `/imu` | `sensor_msgs/Imu` | IMU 姿态 |
+| `/scan` | `sensor_msgs/LaserScan` | 2D 激光 |
+| `/cmd_vel` | `geometry_msgs/Twist` | 控制车 |
+| `/ros_robot_controller/battery` | `std_msgs/UInt16` | 电池百分比（×100，见 Bug #4）|
+
+订阅示例（参考 `monitor_node.py` 的写法）：
+
+```python
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import Imu
+
+reliable_qos = QoSProfile(reliability=ReliabilityPolicy.RELIABLE, depth=10)
+self.create_subscription(Imu, '/imu', self.on_imu, reliable_qos)
+```
+
+发布 `/cmd_vel`：
+
+```python
+from geometry_msgs.msg import Twist
+self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', reliable_qos)
+
+# 10 Hz 发一次
+self.create_timer(0.1, lambda: self.cmd_pub.publish(
+    Twist linear=Twist(linear_x=0.1)))  # 0.1 m/s 前进
+```
+
+完整端到端示例（Python / C++ / GUI 三种）见 `docs/EXAMPLES.md`。
+
+### 容器内调试技巧
+
+```bash
+# 进容器 shell
+bash mentorpi.sh exec                              # 默认进 monitor
+docker exec -it mentorpi_cpp_demo bash             # 进指定容器
+
+# 在容器内
+source /opt/ros/humble/setup.bash
+source /workspace/install/setup.bash
+ros2 topic list                                    # 看话题
+ros2 topic hz /odom                                # 测频率
+ros2 topic echo /imu --once                        # 看一帧数据
+ros2 run rqt_graph rqt_graph                       # 节点图（需 X11）
+ros2 run <你的包名> <节点> --ros-args -p print_hz:=2.0  # 手动跑节点
+```
+
+---
+
+## 端到端 5 步验证（树莓派上电后）
+
+刚把树莓派接上 / 重新上电，按这 5 步 5 分钟内确认全链路 OK：
+
+**Step 1：网络**
+
+```bash
+ping -c 3 192.168.149.1
+```
+
+期望 `0% packet loss`。不通 → PC WiFi 重连 `HW-9E7168C4`。
+
+**Step 2：PC 看到树莓派话题**
+
+```bash
+docker exec mentorpi_monitor bash -lc \
+  'source /opt/ros/humble/setup.bash && \
+   source /workspace/install/setup.bash && \
+   ros2 topic list' | head -30
+```
+
+期望至少看到 `/odom /imu /joint_states /scan /tf /ros_robot_controller/battery /rosout` 等。
+
+**Step 3：monitor 收到数据**
+
+```bash
+docker logs -f mentorpi_monitor
+```
+
+期望（不是 `--`，是真值）：
+```
+bat=12.34V 85.00%   pose=(1.23, 0.45, yaw=30°)
+imu  R/P/Y=0°/0°/30°  vel=(0.10, 0.00)
+topics: /battery=fresh, /imu=fresh, /odom=fresh
+```
+
+`topics: ...fresh` = 端到端成功。`STALE` 或 `--` → 树莓派没起来。
+
+**Step 4：cpp_demo 收到 /odom**
+
+```bash
+docker logs -f mentorpi_cpp_demo
+```
+
+期望：`x=... y=... yaw=...`。只有 `waiting for odom...` → /odom 没数据。
+
+**Step 5（可选）：GUI 起来**
+
+```bash
+bash mentorpi.sh gui
+# 看桌面窗口点「连接」
+```
+
+**全 OK 标志**：
+- ✅ ping 通
+- ✅ `ros2 topic list` ≥30 个话题
+- ✅ monitor `topics: ...fresh`
+- ✅ cpp_demo 有真实坐标
+- ✅ GUI 弹窗点连接显示数据
+
+---
+
+## 30 秒速查（按场景）
+
+| 想做什么 | 一条命令 |
+|---------|--------|
+| 改 Python 节点 | `code ~/mentorpi_pc_framework` → 改 `.py` → `bash mentorpi.sh rebuild -w mentorpi_pc_monitor` |
+| 改 C++ 节点 | 同上 → `bash mentorpi.sh rebuild -w mentorpi_pc_cpp_demo` |
+| 改 GUI（C#） | `code services/gui` → 改 `.cs/.axaml` → `F5` → "GUI: dotnet run (宿主)" |
+| 看 PC 端 ROS 数据 | `docker exec mentorpi_monitor bash -lc 'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && ros2 topic list'` |
+| 看某个容器实时日志 | `bash mentorpi.sh logs <模块名>` |
+| 调试节点（容器内） | `bash mentorpi.sh exec <模块名>` → 容器内 `ros2 topic hz /odom` |
+| 进容器手动跑节点 | `docker exec -it mentorpi_xxx bash` → `source /opt/ros/humble/setup.bash && ros2 run <pkg> <node>` |
+| 重 build 所有镜像 | `docker compose build --no-cache` |
+| 删所有容器+镜像（重置）| `docker compose down --rmi all` ⚠️ 不可逆 |
+| 看所有状态 | `bash mentorpi.sh status` |
+| 停所有 | `bash mentorpi.sh stop` |
+
+### 网络问题排查
+
+| 现象 | 步骤 |
+|------|------|
+| 收不到树莓派话题 | `ping 192.168.149.1` |
+| 树莓派热点没连 | `nmcli device wifi connect HW-9E7168C4 password hiwonder` |
+| ROS_DOMAIN_ID 不一致 | 检查 `docker-compose.yml` 每个 service 都是 `ROS_DOMAIN_ID=0` |
+| DDS 收不到但 ICMP 通 | 换 Cyclone DDS：`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` |
+
+### 镜像/容器生命周期
+
+```
+docker compose build              # build 镜像
+docker compose up -d              # 起容器（自动 build 如果镜像不存在）
+docker compose down               # 停容器（保留镜像）
+docker compose down --rmi all     # 停容器 + 删镜像
+docker compose down -v             # 停容器 + 删卷
+```

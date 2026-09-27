@@ -202,13 +202,9 @@ docker compose up my_cool_algo
 
 ## 文档
 
-- `docs/QUICKSTART_REBOOT.md` —— ⭐ 每次重启后如何快速开始、编译运行
-- `docs/SETUP_FROM_ZERO.md` —— Ubuntu 24.04 从 0 搭建整套环境
-- `docs/MULTI_PC_COLLAB.md` —— 多台 PC 开发不同功能如何整合
-- `docs/ARCHITECTURE.md` —— 详细架构
-- `docs/QUICKSTART_FOR_DEVS.md` —— 5 分钟接入新算法模块
-- `docs/EXAMPLES.md` —— **完整端到端示例**：加 Python 节点 / 加 C++ 节点 / GUI 显示新话题（**15 分钟跑通一个完整 demo**）
-- `docs/DECISION_TREE.md` —— 30 秒速查「我现在想做什么」
-- `docs/VERIFY.md` —— 树莓派回来后端到端验证 checklist
+- `docs/QUICKSTART_REBOOT.md` —— ⭐ **主入口**：每次重启后怎么开始、改代码、加新模块、30 秒速查、5 步端到端验证、已修 Bug 记录
+- `docs/SETUP_FROM_ZERO.md` —— Ubuntu 24.04 从 0 搭建整套环境（一次性）
+- `docs/EXAMPLES.md` —— **完整端到端示例**：加 Python 节点 / 加 C++ 节点 / GUI 显示新话题（15 分钟跑通一个 demo）
+- `docs/ARCHITECTURE.md` —— 架构详解
 - `modules/_template/README.md` —— 新模块模板说明
 - `services/gui/README.md` —— GUI 开发指南
