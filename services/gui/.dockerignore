@@ -1,0 +1,6 @@
+# 不把宿主本地编译产物带进镜像 —— 否则会覆盖容器内 restore 生成的
+# obj/project.assets.json（它记录的是宿主路径 /home/robot/.nuget/packages），
+# 导致 publish --no-restore 找不到包（NETSDK1064）。
+bin/
+obj/
+*.nupkg

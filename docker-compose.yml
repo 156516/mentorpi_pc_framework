@@ -1,0 +1,95 @@
+# MentorPi PC 上位机框架 — 一键起所有模块
+# 用法:
+#   cd ~/mentorpi_pc_framework
+#   docker compose build              # build 所有镜像
+#   docker compose up                 # 起所有容器（前台）
+#   docker compose up -d              # 后台起
+#   docker compose up mentorpi_pc_monitor rosbridge mentorpi_pc_gui   # 只起某几个
+#   docker compose down               # 关停
+#   docker compose logs -f mentorpi_pc_monitor   # 看日志
+#
+# ROS_DOMAIN_ID=0 是关键，所有容器 + 树莓派在同一 DDS 域
+
+services:
+  # 监控节点（Python）— 订阅 /odom /imu /battery，打印状态摘要
+  mentorpi_pc_monitor:
+    build:
+      context: .
+      dockerfile: modules/mentorpi_pc_monitor/Dockerfile
+    image: mentorpi_pc/monitor:latest
+    container_name: mentorpi_monitor
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - ROS_LOCALHOST_ONLY=0
+    restart: unless-stopped
+
+  # C++ 演示节点（订阅 /odom 发布 /cmd_vel）
+  mentorpi_pc_cpp_demo:
+    build:
+      context: .
+      dockerfile: modules/mentorpi_pc_cpp_demo/Dockerfile
+    image: mentorpi_pc/cpp_demo:latest
+    container_name: mentorpi_cpp_demo
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+    restart: unless-stopped
+
+  # URDF/launch 模板包 — 不长期跑，按需起
+  mentorpi_description:
+    build:
+      context: .
+      dockerfile: modules/mentorpi_description/Dockerfile
+    image: mentorpi_pc/description:latest
+    container_name: mentorpi_description
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+    profiles: ["tools"]              # 默认不跑：docker compose --profile tools up mentorpi_description
+
+  # 算法模块示例：订阅 /scan + /odom 算前/左/右障碍物距离
+  obstacle_distance:
+    build:
+      context: .
+      dockerfile: modules/obstacle_distance/Dockerfile
+    image: mentorpi_pc/obstacle_distance:latest
+    container_name: mentorpi_obstacle
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+    restart: unless-stopped
+
+  # rosbridge — WebSocket 桥，让非 ROS2 客户端（Web/C#/JS）能订阅 ROS2 话题
+  rosbridge:
+    build:
+      context: .
+      dockerfile: services/rosbridge/Dockerfile
+    image: mentorpi_pc/rosbridge:latest
+    container_name: mentorpi_rosbridge
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+    ports:
+      - "9090:9090"                  # WebSocket 端口（host 模式可省，但加一下更明确）
+    restart: unless-stopped
+
+  # C# GUI — Avalonia 跨平台桌面应用
+  # 启动命令：
+  #   xhost +local:docker            # 第一次运行让 docker 用宿主 X11
+  #   docker compose up -d mentorpi_pc_gui
+  mentorpi_pc_gui:
+    build:
+      context: services/gui
+      dockerfile: Dockerfile
+    image: mentorpi_pc/gui:latest
+    container_name: mentorpi_gui
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - ROS_BRIDGE_URL=ws://localhost:9090
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${HOME}/.Xauthority:/root/.Xauthority:ro
+    profiles: ["gui"]                # 默认不跑：docker compose --profile gui up mentorpi_pc_gui

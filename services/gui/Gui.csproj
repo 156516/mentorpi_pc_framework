@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>mentorpi_pc_gui</AssemblyName>
+    <RootNamespace>MentorpiPc.Gui</RootNamespace>
+    <UseAvalonia>true</UseAvalonia>
+    <AvaloniaVersion>11.0.0</AvaloniaVersion>
+    <ApplicationIcon />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.0" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.0.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.0" />
+    <!-- ROS2 客户端：直接用 rosbridge WebSocket 协议（不依赖原生 rcl，跨平台） -->
+    <PackageReference Include="Websocket.Client" Version="5.5.1" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+# build 产物（不提交）
+build/
+install/
+log/
+
+# IDE
+.vscode/
+.idea/
+
+# 临时
+*.pyc
+__pycache__/
+
+# bin/obj（C#）
+bin/
+obj/
+
+# Docker
+**/.dockerignore-tmp
+
+# 镜像产物（不要提交大文件）
+*.tar
+*.tar.gz
