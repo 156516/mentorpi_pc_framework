@@ -18,6 +18,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# 拿 compose 服务对应的容器 ID（兼容带 / 不带 hash 前缀的命名）。
+# 用法: cid=$(container_id mentorpi_pc_monitor) || return 1
+container_id() {
+    local svc="$1"
+    docker compose ps -q "$svc" 2>/dev/null | head -1
+}
+
 C_GREEN='\033[0;32m'
 C_YELLOW='\033[1;33m'
 C_RED='\033[0;31m'
@@ -60,8 +67,8 @@ case "$cmd" in
         sleep 5
 
         # 看 monitor 最后一行验证数据流
-        if docker logs --tail 3 mentorpi_monitor 2>&1 | grep -q "topics:"; then
-            TOPICS=$(docker logs --tail 3 mentorpi_monitor 2>&1 | grep "topics:" | tail -1 | sed 's/.*topics: //')
+        if MON_CID=$(container_id mentorpi_pc_monitor) && docker logs --tail 3 "$MON_CID" 2>&1 | grep -q "topics:"; then
+            TOPICS=$(docker logs --tail 3 "$MON_CID" 2>&1 | grep "topics:" | tail -1 | sed 's/.*topics: //')
             if echo "$TOPICS" | grep -q "fresh"; then
                 ok "数据流通：$TOPICS"
             else
@@ -105,16 +112,16 @@ case "$cmd" in
             || docker compose ps
         echo ""
 
-        # 数据流状态
-        if docker ps --format '{{.Names}}' | grep -q '^mentorpi_monitor$'; then
+        # 数据流状态（兼容带/不带 hash 前缀的容器名）
+        if MON_CID=$(container_id mentorpi_pc_monitor); then
             info "monitor 数据流（最近一行）"
-            docker logs --tail 1 mentorpi_monitor 2>&1 | grep -v "^$" | head -4
+            docker logs --tail 1 "$MON_CID" 2>&1 | grep -v "^$" | head -4
         else
             warn "monitor 容器没在跑 → bash mentorpi.sh start"
         fi
 
         # GUI 状态
-        if docker ps --format '{{.Names}}' | grep -q '^mentorpi_gui$'; then
+        if container_id mentorpi_pc_gui >/dev/null 2>&1; then
             ok "GUI 在跑"
         else
             echo ""
@@ -122,9 +129,9 @@ case "$cmd" in
         fi
 
         # rosbridge 健康度（4-6 小时后会出现"假活"，见文档）
-        if docker ps --format '{{.Names}}' | grep -q '^mentorpi_rosbridge$'; then
+        if docker ps --format '{{.Names}}' | grep -q 'mentorpi_rosbridge'; then
             info "rosbridge 健康度"
-            SUBS=$(docker exec mentorpi_monitor 2>/dev/null bash -c \
+            SUBS=$(docker exec "$MON_CID" 2>/dev/null bash -c \
                 "source /opt/ros/humble/setup.bash 2>/dev/null && ros2 node info /rosbridge_websocket 2>/dev/null | grep -A 20 'Subscribers:' | grep -c '/'" \
                 || echo "?")
             if [[ "$SUBS" =~ ^[0-9]+$ ]] && [[ $SUBS -ge 3 ]]; then
@@ -194,8 +201,9 @@ case "$cmd" in
         info "重启 rosbridge（修「假活」——容器在跑但 Subscribers 是空）"
         docker compose restart rosbridge
         sleep 3
-        # 自动验证：restart 后应该有 ≥3 个 ROS 订阅
-        SUBS=$(docker exec mentorpi_monitor 2>/dev/null bash -c \
+        # 自动验证：restart 后应该有 ≥3 个 ROS 订阅（用 compose 服务名拿 ID，兼容 hash 前缀）
+        MON_CID=$(container_id mentorpi_pc_monitor)
+        SUBS=$(docker exec "$MON_CID" 2>/dev/null bash -c \
             "source /opt/ros/humble/setup.bash 2>/dev/null && ros2 node info /rosbridge_websocket 2>/dev/null | grep -A 30 'Subscribers:' | grep -c '/'" \
             || echo "?")
         if [[ "$SUBS" =~ ^[0-9]+$ ]] && [[ $SUBS -ge 3 ]]; then
@@ -208,11 +216,12 @@ case "$cmd" in
     check-bridge)
         # 诊断：rosbridge 是否真的活着（vs 假活）
         info "rosbridge 健康度"
-        if ! docker ps --format '{{.Names}}' | grep -q '^mentorpi_rosbridge$'; then
+        if ! docker ps --format '{{.Names}}' | grep -q 'mentorpi_rosbridge'; then
             warn "rosbridge 容器没在跑 → bash mentorpi.sh start"
             exit 1
         fi
-        INFO=$(docker exec mentorpi_monitor bash -c \
+        MON_CID=$(container_id mentorpi_pc_monitor)
+        INFO=$(docker exec "$MON_CID" bash -c \
             "source /opt/ros/humble/setup.bash 2>/dev/null && ros2 node info /rosbridge_websocket 2>/dev/null" 2>&1)
         echo "$INFO" | grep -E "^(  Subscribers:|  Publishers:|    /)" | head -30
         SUBS=$(echo "$INFO" | grep -A 30 "^  Subscribers:" | grep -c "^    /")
