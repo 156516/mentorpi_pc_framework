@@ -2,13 +2,15 @@
 # MentorPi PC 上位机框架一键管理脚本
 #
 # 用法:
-#   bash mentorpi.sh start      起 4 个核心容器 (monitor / cpp_demo / obstacle / rosbridge)
-#   bash mentorpi.sh gui        起 GUI 控制台 (要图形显示)
-#   bash mentorpi.sh status     一眼看所有容器状态
-#   bash mentorpi.sh logs [模块] 跟日志（默认 monitor，Ctrl+C 退出）
-#   bash mentorpi.sh stop       停所有容器
-#   bash mentorpi.sh rebuild [模块] 强制重 build + 重启（不指定模块 = 全部）
+#   bash mentorpi.sh start           起 4 个核心容器 (monitor / cpp_demo / obstacle / rosbridge)
+#   bash mentorpi.sh gui             起 GUI 控制台 (要图形显示)
+#   bash mentorpi.sh status          一眼看所有容器状态
+#   bash mentorpi.sh logs [模块]     跟日志（默认 monitor，Ctrl+C 退出）
+#   bash mentorpi.sh stop            停所有容器
+#   bash mentorpi.sh rebuild [模块]  强制重 build + 重启（不指定模块 = 全部）
 #   bash mentorpi.sh rebuild -w [模块] build 完自动跟日志（Ctrl+C 退出日志）
+#   bash mentorpi.sh restart-bridge  重启 rosbridge（GUI 显示 0 假活时用）
+#   bash mentorpi.sh check-bridge    诊断 rosbridge 是否"假活"（Subscribers 是否空）
 #
 # 第一次跑 start 会自动 build base 镜像（~几分钟）
 
@@ -77,6 +79,19 @@ case "$cmd" in
 
     gui)
         info "起 GUI 控制台"
+        # 准备 Xauthority：Wayland 下 ~/.Xauthority 是空文件，要从 xauth info 拿真实路径
+        XAUTH_SRC="$(xauth info 2>/dev/null | awk -F': ' '/Authority file/ {print $2; exit}')"
+        if [[ -n "$XAUTH_SRC" && -f "$XAUTH_SRC" && -s "$XAUTH_SRC" ]]; then
+            cp -f "$XAUTH_SRC" /tmp/.docker-xauth
+            chmod 644 /tmp/.docker-xauth
+            ok "Xauthority: $XAUTH_SRC → /tmp/.docker-xauth"
+        elif [[ -f "$HOME/.Xauthority" && -s "$HOME/.Xauthority" ]]; then
+            cp -f "$HOME/.Xauthority" /tmp/.docker-xauth
+            chmod 644 /tmp/.docker-xauth
+            ok "Xauthority: ~/.Xauthority → /tmp/.docker-xauth"
+        else
+            warn "找不到 Xauthority（Wayland 没起？），尝试用 Xauthority= 无 cookie 启动（可能 X server 会拒）"
+        fi
         xhost +local:docker >/dev/null 2>&1 || warn "xhost 失败，窗口可能弹不出"
         docker compose --profile gui up -d mentorpi_pc_gui
         ok "GUI 容器已起。窗口没弹出来时：docker logs -f mentorpi_gui"
@@ -104,6 +119,21 @@ case "$cmd" in
         else
             echo ""
             info "GUI 没起 → bash mentorpi.sh gui"
+        fi
+
+        # rosbridge 健康度（4-6 小时后会出现"假活"，见文档）
+        if docker ps --format '{{.Names}}' | grep -q '^mentorpi_rosbridge$'; then
+            info "rosbridge 健康度"
+            SUBS=$(docker exec mentorpi_monitor 2>/dev/null bash -c \
+                "source /opt/ros/humble/setup.bash 2>/dev/null && ros2 node info /rosbridge_websocket 2>/dev/null | grep -A 20 'Subscribers:' | grep -c '/'" \
+                || echo "?")
+            if [[ "$SUBS" =~ ^[0-9]+$ ]] && [[ $SUBS -ge 3 ]]; then
+                ok "rosbridge 健康（$SUBS 个 ROS 订阅）"
+            elif [[ "$SUBS" == "0" ]]; then
+                warn "rosbridge 假活！0 个 ROS 订阅 → bash mentorpi.sh restart-bridge"
+            else
+                echo "  (Subscribers 数: $SUBS)"
+            fi
         fi
         ;;
 
@@ -156,6 +186,40 @@ case "$cmd" in
             echo ""
             info "看 logs: bash mentorpi.sh logs $TARGET"
             info "或加 -w 自动跟: bash mentorpi.sh rebuild -w $TARGET"
+        fi
+        ;;
+
+    restart-bridge)
+        # GUI 显示全 0 时第一招——rosbridge 假活，restart 一下就好
+        info "重启 rosbridge（修「假活」——容器在跑但 Subscribers 是空）"
+        docker compose restart rosbridge
+        sleep 3
+        # 自动验证：restart 后应该有 ≥3 个 ROS 订阅
+        SUBS=$(docker exec mentorpi_monitor 2>/dev/null bash -c \
+            "source /opt/ros/humble/setup.bash 2>/dev/null && ros2 node info /rosbridge_websocket 2>/dev/null | grep -A 30 'Subscribers:' | grep -c '/'" \
+            || echo "?")
+        if [[ "$SUBS" =~ ^[0-9]+$ ]] && [[ $SUBS -ge 3 ]]; then
+            ok "rosbridge 已恢复（$SUBS 个 ROS 订阅）—— GUI 重新点「连接」"
+        else
+            warn "restart 后仍异常（Subscribers: $SUBS），看 logs: bash mentorpi.sh logs rosbridge"
+        fi
+        ;;
+
+    check-bridge)
+        # 诊断：rosbridge 是否真的活着（vs 假活）
+        info "rosbridge 健康度"
+        if ! docker ps --format '{{.Names}}' | grep -q '^mentorpi_rosbridge$'; then
+            warn "rosbridge 容器没在跑 → bash mentorpi.sh start"
+            exit 1
+        fi
+        INFO=$(docker exec mentorpi_monitor bash -c \
+            "source /opt/ros/humble/setup.bash 2>/dev/null && ros2 node info /rosbridge_websocket 2>/dev/null" 2>&1)
+        echo "$INFO" | grep -E "^(  Subscribers:|  Publishers:|    /)" | head -30
+        SUBS=$(echo "$INFO" | grep -A 30 "^  Subscribers:" | grep -c "^    /")
+        if [[ $SUBS -ge 3 ]]; then
+            ok "健康（$SUBS 个 ROS 订阅）"
+        else
+            warn "假活！只有 $SUBS 个订阅 → bash mentorpi.sh restart-bridge"
         fi
         ;;
 

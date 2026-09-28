@@ -77,7 +77,7 @@ services:
   # C# GUI — Avalonia 跨平台桌面应用
   # 启动命令：
   #   xhost +local:docker            # 第一次运行让 docker 用宿主 X11
-  #   docker compose up -d mentorpi_pc_gui
+  #   docker compose --profile gui up -d mentorpi_pc_gui
   mentorpi_pc_gui:
     build:
       context: services/gui
@@ -89,7 +89,12 @@ services:
       - ROS_DOMAIN_ID=0
       - ROS_BRIDGE_URL=ws://localhost:9090
       - DISPLAY=${DISPLAY:-:0}
+      # Wayland 下 Xauthority 是 /run/user/<uid>/.mutter-Xwaylandauth.*，
+      # 容器读不到宿主用户的 cookie；用 XAUTHORITY 环境变量指向真实文件
+      - XAUTHORITY=/tmp/.docker-xauth
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ${HOME}/.Xauthority:/root/.Xauthority:ro
+      # 不挂载宿主 ~/.Xauthority（Wayland 下该文件可能为空），
+      # 而是让 mentorpi.sh 把宿主真实的 Xauthority 复制到 /tmp/.docker-xauth 再挂进来
+      - /tmp/.docker-xauth:/tmp/.docker-xauth:ro
     profiles: ["gui"]                # 默认不跑：docker compose --profile gui up mentorpi_pc_gui

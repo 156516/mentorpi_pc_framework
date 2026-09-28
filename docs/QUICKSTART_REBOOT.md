@@ -68,9 +68,12 @@ bash mentorpi.sh gui      # 起 GUI 控制台
 bash mentorpi.sh gui
 ```
 
-- 自动跑 `xhost +local:docker`（第一次需要）
+- 自动从 `xauth info` 拿真实 Xauthority（Wayland 下 `~/.Xauthority` 是空文件）
+- 自动跑 `xhost +local:docker`
 - 起 GUI 容器
-- 窗口弹出后点左上角**「连接」**，显示电池 / 速度 / IMU
+- **窗口弹出后点左上角「连接」**，显示电池 / 速度 / IMU
+
+> Wayland + mutter 用户特别注意：GUI 容器里 XAUTHORITY 必须指向宿主真实的 `~/.mutter-Xwaylandauth.*` 文件，不能用空 `~/.Xauthority`。脚本已自动处理。如果手起失败，看「常见坑 #5」。
 
 ---
 
@@ -172,7 +175,8 @@ code ~/mentorpi_pc_framework/services/gui   # GUI 子项目（dotnet 智能提�
 
 | 现象 | 原因 | 修法 |
 |------|------|------|
-| GUI 连上了但数据全 0 | rosbridge 容器跑久了内部线程卡死 | `docker compose restart rosbridge`，重连 |
+| **GUI 连上了但数据全 0**（rosbridge 跑 4-6 小时后） | rosbridge 容器"假活"——容器在跑、9090 在听、WebSocket subscribe 也成功，但**容器内 ROS 节点的 Subscribers 是空的**，所以 ROS 消息转不出来 | `bash mentorpi.sh restart-bridge`，再点 GUI 连接按钮 |
+| Wayland 下 GUI 容器起不来（X connection 错误） | 宿主的 `~/.Xauthority` 是空文件（GNOME Wayland 用 `~/.mutter-Xwaylandauth.*` 真实 cookie）| 已修：`bash mentorpi.sh gui` 自动从 `xauth info` 拿真实路径复制到 `/tmp/.docker-xauth` 挂进容器 |
 | 收不到话题数据 | QoS 不匹配（订阅端必须 reliable） | 已修：所有节点都用 `QoSProfile(reliability=ReliabilityPolicy.RELIABLE)` |
 | `/odom` 有、`/imu` `/battery` 没 | 树莓派 STM32 没正常起（没「滴」声）| 树莓派重新上电，听滴声 |
 | 驱动报 `No such file or directory: '/dev/rrc'` | STM32 被识别成 ttyUSB 而非 ttyACM，udev 没建 /dev/rrc | 见 `SETUP_FROM_ZERO.md` 附录「串口设备名」|
@@ -180,6 +184,21 @@ code ~/mentorpi_pc_framework/services/gui   # GUI 子项目（dotnet 智能提�
 | `docker compose build` 卡在 restore | NuGet 源慢 | 已配国内镜像，耐心等或换源 |
 | GUI `dotnet run` 抛 `Default font family name can't be null or empty` | Avalonia 11.0 的 `Avalonia.Fonts.Inter` 包**没塞字体**，在 Linux 下崩 | `Gui.csproj` 升到 **11.3.22**（已升级） |
 | monitor `bat=12.88V 79.45%` 显示奇怪 | /battery 实际发 `UInt16`，raw 是百分比 ×100 | 已修，自动归一化（见下面 Bug #4）|
+
+### rosbridge"假活"快速诊断
+
+如果怀疑 rosbridge 在假活，**先别急着 restart**，跑这个确认：
+
+```bash
+docker exec mentorpi_monitor bash -c \
+  "source /opt/ros/humble/setup.bash && ros2 node info /rosbridge_websocket" \
+  | head -8
+```
+
+- 正常：`Subscribers:` 后面列着一堆 `/odom /imu /battery /tf` 等
+- 假活：`Subscribers:` 后面是**空的**
+
+确认假活后：`bash mentorpi.sh restart-bridge`（一行 restart rosbridge 的快捷方式，见脚本）。
 
 ---
 
