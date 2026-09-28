@@ -87,7 +87,8 @@ case "$cmd" in
     gui)
         info "起 GUI 控制台"
         # 准备 Xauthority：Wayland 下 ~/.Xauthority 是空文件，要从 xauth info 拿真实路径
-        XAUTH_SRC="$(xauth info 2>/dev/null | awk -F': ' '/Authority file/ {print $2; exit}')"
+        # xauth info 用 TAB+空格 分隔（不是单一 ': '），awk 后要 strip 前导空白
+        XAUTH_SRC="$(xauth info 2>/dev/null | awk -F': ' '/Authority file/ {print $2; exit}' | sed 's/^[[:space:]]*//')"
         if [[ -n "$XAUTH_SRC" && -f "$XAUTH_SRC" && -s "$XAUTH_SRC" ]]; then
             cp -f "$XAUTH_SRC" /tmp/.docker-xauth
             chmod 644 /tmp/.docker-xauth
