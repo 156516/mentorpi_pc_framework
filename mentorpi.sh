@@ -11,6 +11,8 @@
 #   bash mentorpi.sh rebuild -w [模块] build 完自动跟日志（Ctrl+C 退出日志）
 #   bash mentorpi.sh restart-bridge  重启 rosbridge（GUI 显示 0 假活时用）
 #   bash mentorpi.sh check-bridge    诊断 rosbridge 是否"假活"（Subscribers 是否空）
+#   bash mentorpi.sh slam            起 SLAM 建图（slam_toolbox 在线异步）
+#   bash mentorpi.sh save-map <名>   把当前 /map 存到 maps/<名>.{pgm,yaml}
 #
 # 第一次跑 start 会自动 build base 镜像（~几分钟）
 
@@ -231,6 +233,51 @@ case "$cmd" in
         else
             warn "假活！只有 $SUBS 个订阅 → bash mentorpi.sh restart-bridge"
         fi
+        ;;
+
+    slam)
+        # SLAM 在线建图——订阅 /scan_raw + /odom + /tf，发布 /map + map→odom TF
+        info "起 SLAM 建图（slam_toolbox 在线异步）"
+        if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q '^mentorpi_pc/slam_toolbox:latest$'; then
+            info "首次跑 slam：先 build（~2-3 分钟）"
+            docker compose --profile slam build mentorpi_pc_slam_toolbox
+        fi
+        mkdir -p maps
+        docker compose --profile slam up -d mentorpi_pc_slam_toolbox
+        ok "SLAM 容器已起。开 APP / 手柄开车扫一圈后：bash mentorpi.sh save-map <房间名>"
+        info "跟日志：bash mentorpi.sh logs mentorpi_pc_slam_toolbox"
+        ;;
+
+    save-map)
+        # 用 slam_toolbox 自带的 service 把当前 /map 存成 .pgm + .yaml
+        # slam_toolbox/srv/SaveMap（async_slam_toolbox_node 服务名 /slam_toolbox/save_map）
+        NAME="${2:-map}"
+        CID=$(container_id mentorpi_pc_slam_toolbox)
+        if [[ -z "$CID" ]]; then
+            err "SLAM 容器没在跑 → bash mentorpi.sh slam"
+            exit 1
+        fi
+        info "保存地图到 maps/${NAME}.{pgm,yaml}"
+        # ⚠️ docker exec 默认不读 stdin（heredoc 不工作）；
+        # 引号嵌套太深（4 层：宿 bash → 宿 ssh 字符串 → 容器 bash -lc → ROS yaml）会出 \}
+        # 修法：把 yaml 字符串作为 bash -c 的参数传入（bash -c "$0" "$1" — $1 = yaml 字符串）
+        docker exec "$CID" bash -lc \
+            'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash && ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "$1" && ls -la /workspace/maps/'"${NAME}"'.*' \
+            _ "{name: {data: '/workspace/maps/${NAME}'}}"
+        # ls 在容器内跑、看不到宿主 maps——等几秒让 bind mount 同步
+        # 等文件落盘（map_saver lifecycle + map_io 写盘 + bind mount 同步，通常 < 3s）
+        for i in 1 2 3 4 5; do
+            if [[ -f "maps/${NAME}.pgm" ]] && [[ -f "maps/${NAME}.yaml" ]]; then
+                SIZE=$(stat -c '%s' "maps/${NAME}.pgm" 2>/dev/null || echo 0)
+                if [[ $SIZE -gt 100 ]]; then
+                    ok "已保存：maps/${NAME}.pgm (${SIZE} bytes) + maps/${NAME}.yaml"
+                    info "下一步：导航课会用 nav2 load map → maps/${NAME}.yaml"
+                    exit 0
+                fi
+            fi
+            sleep 1
+        done
+        warn "保存失败，看 logs：bash mentorpi.sh logs mentorpi_pc_slam_toolbox"
         ;;
 
     *)

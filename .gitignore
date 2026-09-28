@@ -27,3 +27,8 @@ obj/
 # 镜像产物（不要提交大文件）
 *.tar
 *.tar.gz
+
+# SLAM 地图（不提交 .pgm 二进制大文件；目录保留用于保存地图）
+maps/*.pgm
+maps/*.yaml
+!maps/.gitkeep

@@ -60,6 +60,22 @@ services:
       - ROS_DOMAIN_ID=0
     restart: unless-stopped
 
+  # SLAM 建图（slam_toolbox 在线异步）
+  # 订阅 /scan_raw + /odom + /tf  →  发布 /map + map→odom TF
+  # 启动命令：bash mentorpi.sh slam
+  mentorpi_pc_slam_toolbox:
+    build:
+      context: .
+      dockerfile: modules/mentorpi_pc_slam_toolbox/Dockerfile
+    image: mentorpi_pc/slam_toolbox:latest
+    container_name: mentorpi_slam_toolbox
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - ./maps:/workspace/maps        # 地图保存目录挂到宿主的 ./maps
+    profiles: ["slam"]                # 默认不跑：bash mentorpi.sh slam
+
   # rosbridge — WebSocket 桥，让非 ROS2 客户端（Web/C#/JS）能订阅 ROS2 话题
   rosbridge:
     build:

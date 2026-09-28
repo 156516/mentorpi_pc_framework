@@ -1,0 +1,60 @@
+# slam_toolbox 在线异步建图参数（HiWonder MentorPi 适配）
+# 喂：/scan（launch 里 remap /scan_raw → /scan）/tf /tf_static /odom
+# 出：/map（nav_msgs/OccupancyGrid）+ map→odom TF
+
+slam_toolbox:
+  ros__parameters:
+
+    # === 框架 ===
+    # 真车：/odom.child_frame_id = base_footprint（IMU+ekf 融合）
+    # 真车：URDF 静态 = base_footprint → base_link → lidar_frame
+    # 所以 base_frame 用 base_footprint 而不是 base_link——避开 odom→base_link 链断裂
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+
+    # === 模式 ===
+    mode: mapping            # online_async_mapping（异步建图，不阻塞 sensor input）
+
+    # === 地图 ===
+    resolution: 0.05         # 5cm / pixel（HiWonder 默认；房间大可改 0.08）
+    minimum_laser_range: 0.05
+    max_laser_range: 12.0    # MS200 雷达量程 12m
+
+    # === 性能 ===
+    transform_publish_period: 0.02       # 50Hz TF（够 nav 用）
+    map_update_interval: 5.0             # /map 重发周期（s）；UI 订阅时不会卡
+    minimum_time_interval: 0.5           # 两帧 scan 最小间隔（s）——雷达过快时丢帧
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0             # TF 缓存 30s
+    stack_size_to_use: 40000000          # Karto scan matcher stack；4cm/pixel + 大地图不会 OOM
+
+    # === 扫描匹配 ===
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.3          # 移动 < 0.3m 不触发 scan match（避免抖动）
+    minimum_travel_heading: 0.3           # 旋转 < 0.3 rad 不触发
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 12.0
+
+    # === 回环检测（建图必备，否则大房间会漂移）===
+    do_loop_closing: true
+    loop_search_space_height: 0.3         # z 方向搜索（2D 平面所以小一点）
+    loop_search_space_distance: 1.0
+    loop_match_min_chain_size: 10         # 至少 10 个节点才触发回环匹配
+    loop_match_max_variance_coarse: 0.4
+    loop_match_min_response_coarse: 0.6
+    loop_match_min_response_fine: 0.7
+    loop_spaces: true
+    loops_per_overlap: 2
+
+    # === 协方差 / 鲁棒性 ===
+    correlation_search_space_dimension: 0.3
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.03
+    fine_search_range_offset: 0.01
+
+    # === 调试 ===
+    publish_occupancy_grid: true          # 输出 /map
+    publish_tf: true                      # 输出 map → odom TF
