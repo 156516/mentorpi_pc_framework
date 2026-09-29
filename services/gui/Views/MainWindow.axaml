@@ -84,9 +84,9 @@
     <Border Grid.Row="2" Background="#F0F0F0" Padding="8" CornerRadius="4" Margin="0,0,0,8">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <Button Content="{Binding MappingButtonText}" Click="OnToggleMappingClick" MinWidth="110" />
-        <Button Content="💾 保存地图" Command="{Binding SaveMapCommand}" MinWidth="110" />
-        <Button Content="📂 导入图片..." Click="OnImportMapClick" MinWidth="110" />
-        <Button Content="⟳ 重启slam并加载"
+        <Button Content="保存地图" Command="{Binding SaveMapCommand}" MinWidth="110" />
+        <Button Content="导入图片..." Click="OnImportMapClick" MinWidth="110" />
+        <Button Content="重启slam并加载"
                 Command="{Binding RestartSlamWithMapCommand}"
                 IsEnabled="{Binding ImportedMapName, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                 MinWidth="160"

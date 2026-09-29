@@ -34,7 +34,7 @@ public partial class MainViewModel : ObservableObject
     // 地图控制按钮
     [ObservableProperty] private bool _mappingActive = true;
     [ObservableProperty] private string _mapControlStatus = "等待操作";
-    [ObservableProperty] private string _mappingButtonText = "⏸ 暂停建图";
+    [ObservableProperty] private string _mappingButtonText = "暂停建图";
     [ObservableProperty] private string _importedMapName = "";
     [ObservableProperty] private WriteableBitmap? _importedMapImage;
     [ObservableProperty] private string _importedMapInfo = "";
@@ -46,8 +46,8 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnMappingActiveChanged(bool value)
     {
-        MappingButtonText = value ? "⏸ 暂停建图" : "▶ 继续建图";
-        MapControlStatus = value ? "▶ slam_toolbox 处理中" : "⏸ slam_toolbox 已暂停";
+        MappingButtonText = value ? "暂停建图" : "继续建图";
+        MapControlStatus = value ? "slam_toolbox 处理中" : "slam_toolbox 已暂停";
     }
 
     [RelayCommand]
@@ -172,14 +172,14 @@ public partial class MainViewModel : ObservableObject
             if (!ok)
             {
                 MappingActive = prev;
-                MapControlStatus = "❌ pause service 失败";
+                MapControlStatus = "[错误] pause service 失败";
             }
             // 成功时 OnMappingActiveChanged 已经更新了 MappingButtonText 和 MapControlStatus
         }
         catch (Exception ex)
         {
             MappingActive = prev;
-            MapControlStatus = $"❌ pause 超时: {ex.Message}";
+            MapControlStatus = $"[错误] pause 超时: {ex.Message}";
         }
     }
 
@@ -198,17 +198,17 @@ public partial class MainViewModel : ObservableObject
                 "/slam_toolbox/save_map", args);
             if (ok && resp is not null && resp.Result == 0)
             {
-                MapControlStatus = $"✓ 已保存 ~/mentorpi_pc_framework/maps/{name}.{{pgm,yaml}}";
+                MapControlStatus = $"已保存 ~/mentorpi_pc_framework/maps/{name}.{{pgm,yaml}}";
             }
             else
             {
                 var r = resp?.Result ?? -1;
-                MapControlStatus = $"❌ 保存失败: result={r} (1=NO_MAP, 255=FAIL)";
+                MapControlStatus = $"[错误] 保存失败: result={r} (1=NO_MAP, 255=FAIL)";
             }
         }
         catch (Exception ex)
         {
-            MapControlStatus = $"❌ 保存超时: {ex.Message}";
+            MapControlStatus = $"[错误] 保存超时: {ex.Message}";
         }
     }
 
@@ -224,14 +224,14 @@ public partial class MainViewModel : ObservableObject
             ImportedMapImage = info.bmp;
             ImportedMapInfo = info.summary;
             ImportedMapName = Path.GetFileNameWithoutExtension(yamlPath);
-            MapControlStatus = $"📂 已导入 {ImportedMapName} {info.summary}";
+            MapControlStatus = $"已导入 {ImportedMapName} {info.summary}";
         }
         catch (Exception ex)
         {
             ImportedMapImage = null;
             ImportedMapName = "";
             ImportedMapInfo = "";
-            MapControlStatus = $"❌ 导入失败: {ex.Message}";
+            MapControlStatus = $"[错误] 导入失败: {ex.Message}";
         }
     }
 
@@ -362,8 +362,8 @@ public partial class MainViewModel : ObservableObject
         // 需要改 mentorpi.sh 加 load-map 子命令、改 docker-compose 给 slam 容器加 MAP_FILE_NAME 环境变量。
         // 当前 GUI 容器只有 dotnet runtime 没 docker CLI，所以即便要重启也只能通过 marker 文件中转。
         MapControlStatus = string.IsNullOrEmpty(ImportedMapName)
-            ? "⚠ 请先点「导入图片」选地图"
-            : $"⚠ 重启加载功能待实现；请手动跑 bash mentorpi.sh load-map {ImportedMapName}";
+            ? "[提示] 请先点「导入图片」选地图"
+            : $"[提示] 重启加载功能待实现；请手动跑 bash mentorpi.sh load-map {ImportedMapName}";
     }
 
     private static (double, double, double) QuatToRpy(Quaternion q)

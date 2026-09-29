@@ -59,7 +59,7 @@ public partial class MainWindow : Window
         var yamlUri = files[0].Path;
         if (!yamlUri.IsFile || !File.Exists(yamlUri.LocalPath))
         {
-            Vm.MapControlStatus = $"❌ 路径无效: {yamlUri}";
+            Vm.MapControlStatus = $"[错误] 路径无效: {yamlUri}";
             return;
         }
 
@@ -70,7 +70,7 @@ public partial class MainWindow : Window
         var pgmPath = Path.Combine(dir, stemName + ".pgm");
         if (!File.Exists(pgmPath))
         {
-            Vm.MapControlStatus = $"❌ 找不到同名 .pgm: {pgmPath}";
+            Vm.MapControlStatus = $"[错误] 找不到同名 .pgm: {pgmPath}";
             return;
         }
 
