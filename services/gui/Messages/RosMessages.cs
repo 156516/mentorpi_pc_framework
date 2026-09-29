@@ -92,3 +92,22 @@ public sealed class MapMetaData
     public double Resolution { get; set; }
     public Pose Origin { get; set; } = new();
 }
+
+// std_msgs/msg/String — slam_toolbox/srv/SaveMap request 的 name 字段就是它
+public sealed class StdString
+{
+    public string Data { get; set; } = "";
+}
+
+// slam_toolbox/srv/SaveMap（部分字段）
+// req.name 是不含扩展名的完整路径（如 /workspace/maps/room1）
+// resp.result: 0=SUCCESS, 1=NO_MAP_RECEIVED, 255=UNDEFINED_FAILURE
+public sealed class SaveMapRequest
+{
+    public StdString Name { get; set; } = new();
+}
+
+public sealed class SaveMapResponse
+{
+    public int Result { get; set; }
+}

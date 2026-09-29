@@ -1,12 +1,18 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MentorpiPc.Gui.ViewModels"
+        xmlns:conv="clr-namespace:Avalonia.Data.Converters;assembly=Avalonia.Base"
         x:Class="MentorpiPc.Gui.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="MentorPi PC 控制台"
-        Width="1100" Height="720">
+        Width="1100" Height="800">
 
-  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+  <Window.Resources>
+    <!-- 把 ObjectConverters 暴露为 x:Static 资源，避免某些 XAML 解析器对默认 namespace 的支持不一致 -->
+    <!-- 简化：直接用 ResourceInclude 或本地引用 -->
+  </Window.Resources>
+
+  <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="12">
     <!-- 顶栏：连接状态 -->
     <Border Grid.Row="0" Background="#F0F0F0" Padding="8" CornerRadius="4">
       <StackPanel Orientation="Horizontal" Spacing="12">
@@ -52,7 +58,7 @@
 
       </Grid>
 
-      <!-- 下半：/map 地图（来自 PC 端 slam_toolbox） -->
+      <!-- 下半：/map 实时图（叠加在导入的参考图上） -->
       <Border Grid.Row="1" Background="#FAFAFA" Padding="8" CornerRadius="4">
         <DockPanel>
           <TextBlock DockPanel.Dock="Top"
@@ -61,18 +67,41 @@
                      Foreground="Gray"
                      Margin="0,0,0,6" />
           <Border Background="#FFFFFF" BorderBrush="#DDDDDD" BorderThickness="1" ClipToBounds="True">
-            <Image Source="{Binding MapImage}" Stretch="Uniform" />
+            <!-- Grid 叠两层 Image：底层导入参考图（半透明），上层实时 /map -->
+            <Grid>
+              <Image Source="{Binding ImportedMapImage}"
+                     Stretch="Uniform"
+                     Opacity="0.5" />
+              <Image Source="{Binding MapImage}" Stretch="Uniform" />
+            </Grid>
           </Border>
         </DockPanel>
       </Border>
 
     </Grid>
 
+    <!-- 地图控制按钮栏 -->
+    <Border Grid.Row="2" Background="#F0F0F0" Padding="8" CornerRadius="4" Margin="0,0,0,8">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="{Binding MappingButtonText}" Click="OnToggleMappingClick" MinWidth="110" />
+        <Button Content="💾 保存地图" Command="{Binding SaveMapCommand}" MinWidth="110" />
+        <Button Content="📂 导入图片..." Click="OnImportMapClick" MinWidth="110" />
+        <Button Content="⟳ 重启slam并加载"
+                Command="{Binding RestartSlamWithMapCommand}"
+                IsEnabled="{Binding ImportedMapName, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                MinWidth="160"
+                ToolTip.Tip="重启 slam_toolbox 并把导入的图作为定位起点（GUI 内待实现，请手动跑 bash mentorpi.sh load-map &lt;名&gt;）" />
+        <TextBlock Text="{Binding MapControlStatus}" Foreground="Gray" VerticalAlignment="Center" Margin="8,0,0,0" />
+      </StackPanel>
+    </Border>
+
     <!-- 底栏：话题列表 -->
-    <Border Grid.Row="2" Background="#F8F8F8" Padding="8" CornerRadius="4">
+    <Border Grid.Row="3" Background="#F8F8F8" Padding="8" CornerRadius="4">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock Text="订阅：" Foreground="Gray" />
         <TextBlock Text=" /odom   /imu   /ros_robot_controller/battery   /map" />
+        <TextBlock Text="   服务：" Foreground="Gray" Margin="16,0,0,0" />
+        <TextBlock Text=" /slam_toolbox/pause_new_measurements   /slam_toolbox/save_map" />
       </StackPanel>
     </Border>
   </Grid>
