@@ -39,6 +39,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private WriteableBitmap? _importedMapImage;
     [ObservableProperty] private string _importedMapInfo = "";
 
+    // 实时图（轮询：每 5s 调 save_map 写 realtime.{pgm,yaml}，GUI 重新读）
+    // 用这个绕开 slam_toolbox /map publisher GID 假活问题
+    [ObservableProperty] private WriteableBitmap? _realtimeMapImage;
+    [ObservableProperty] private string _realtimeMapInfo = "";
+
     // 小车在导入地图上的实时位置（像素坐标系：左上原点）
     // - CarPixelX/Y：地图 Image 控件内的坐标
     // - CarYawDeg：箭头朝向（度，0=右，90=上，对应 ROS 坐标 Y 朝上）
@@ -61,6 +66,12 @@ public partial class MainViewModel : ObservableObject
     private int _importedMapWidth;
     private int _importedMapHeight;
 
+    // 实时图轮询（slam_toolbox GID 假活修复前的 workaround）
+    private DispatcherTimer? _realtimePollTimer;
+    private const string RealtimeMapBaseName = "realtime";
+    private string RealtimeYamlPath => Path.Combine("/maps", RealtimeMapBaseName + ".yaml");
+    private string RealtimePgmPath => Path.Combine("/maps", RealtimeMapBaseName + ".pgm");
+
     public MainViewModel(RosService ros)
     {
         _ros = ros;
@@ -81,11 +92,102 @@ public partial class MainViewModel : ObservableObject
             await _ros.ConnectAsync();
             ConnectionStatus = "已连接";
             await SubscribeTopicsAsync();
+            StartRealtimeMapPolling();
         }
         catch (Exception ex)
         {
             ConnectionStatus = $"连接失败: {ex.Message}";
         }
+    }
+
+    /// <summary>
+    /// 启动实时图轮询：每 5s 调一次 /slam_toolbox/dynamic_map service（nav_msgs/srv/GetMap），
+    /// response 里直接包含 nav_msgs/OccupancyGrid（带 info.origin = map→odom）。
+    /// 这样绕开 /map publisher GID 假活问题——service 能响应，且能同时拿到：
+    ///   1. 当前 occupancy grid 渲染成 bitmap（实时图叠加层）
+    ///   2. map→odom 变换 → 跟 /odom pose 拼接算出 base_footprint 在 map 中的位置（红三角）
+    /// 频率 5s 跟 slam_toolbox yaml 的 map_update_interval 匹配。
+    /// </summary>
+    private void StartRealtimeMapPolling()
+    {
+        _realtimePollTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _realtimePollTimer.Tick -= OnRealtimePollTick;
+        _realtimePollTimer.Tick += OnRealtimePollTick;
+        _realtimePollTimer.Start();
+        // 立即跑一次（不等 5s）
+        Dispatcher.UIThread.Post(() => OnRealtimePollTick(null, EventArgs.Empty));
+    }
+
+    private async void OnRealtimePollTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            // dynamic_map service 的 request 是空的，传 {}
+            var (ok, resp) = await _ros.CallServiceAsync<GetMapResponse>(
+                "/slam_toolbox/dynamic_map", new { });
+            if (!ok || resp?.Map is null) return;
+            var grid = resp.Map;
+            int w = grid.Info.Width, h = grid.Info.Height;
+            if (w <= 0 || h <= 0 || grid.Data.Length != w * h) return;
+
+            // 渲染为 bitmap（异步执行避免阻塞 UI）
+            var (bmp, summary) = await Task.Run(() => RenderMapFromGrid(grid));
+            RealtimeMapImage = bmp;
+            RealtimeMapInfo = summary;
+
+            // 缓存 map → odom（用于算红三角位置）
+            // info.origin 是 geometry_msgs/Pose（直接子字段 position + orientation），
+            // 它表示「地图左下角在物理世界的位置」= slam_toolbox 当前估计的 map→odom 平移/旋转
+            _mapToOdom = new Transform
+            {
+                Translation = new Vector3
+                {
+                    X = grid.Info.Origin.Position.X,
+                    Y = grid.Info.Origin.Position.Y,
+                    Z = grid.Info.Origin.Position.Z,
+                },
+                Rotation = grid.Info.Origin.Orientation,
+            };
+            // 尝试更新红三角位置
+            UpdateCarPosition();
+        }
+        catch
+        {
+            // 网络层偶尔会掩盖超时，忽略
+        }
+    }
+
+    /// <summary>
+    /// 把 nav_msgs/OccupancyGrid 渲染成 Bgra8888 bitmap（不读 .pgm 文件，纯内存）。
+    /// 跟 RenderMap 用同一套像素映射。
+    /// </summary>
+    private static (WriteableBitmap bmp, string summary) RenderMapFromGrid(OccupancyGrid grid)
+    {
+        var info = grid.Info;
+        int w = info.Width;
+        int h = info.Height;
+        var bmp = new WriteableBitmap(
+            new Avalonia.PixelSize(w, h),
+            new Avalonia.Vector(96, 96),
+            Avalonia.Platform.PixelFormat.Bgra8888,
+            Avalonia.Platform.AlphaFormat.Unpremul);
+        using (var fb = bmp.Lock())
+        {
+            var pixels = new int[w * h];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                int v = grid.Data[i];
+                int argb;
+                if (v < 0)        argb = unchecked((int)0xFF808080);
+                else if (v == 0)  argb = unchecked((int)0xFFFFFFFF);
+                else if (v >= 100) argb = unchecked((int)0xFF000000);
+                else              argb = unchecked((int)0xFF000000 | ((255 - v * 255 / 100) * 0x010101));
+                pixels[i] = argb;
+            }
+            Marshal.Copy(pixels, 0, fb.Address, pixels.Length);
+        }
+        var summary = $"{w}x{h} @ {info.Resolution:F3} m/px";
+        return (bmp, summary);
     }
 
     private async Task SubscribeTopicsAsync()
@@ -218,6 +320,16 @@ public partial class MainViewModel : ObservableObject
     {
         var name = $"map_{DateTime.Now:yyyyMMdd_HHmmss}";
         MapControlStatus = $"保存到 {name}...";
+        var (ok, msg) = await CallSaveMapAsync(name);
+        MapControlStatus = msg;
+    }
+
+    /// <summary>
+    /// 调 slam_toolbox/save_map 把当前图写到 /workspace/maps/{name}.{pgm,yaml}
+    /// 返回 (成功, 状态文字)。被「保存地图」按钮 + 「实时图轮询」共用。
+    /// </summary>
+    private async Task<(bool ok, string status)> CallSaveMapAsync(string name)
+    {
         try
         {
             var args = new
@@ -228,17 +340,17 @@ public partial class MainViewModel : ObservableObject
                 "/slam_toolbox/save_map", args);
             if (ok && resp is not null && resp.Result == 0)
             {
-                MapControlStatus = $"已保存 ~/mentorpi_pc_framework/maps/{name}.{{pgm,yaml}}";
+                return (true, $"已保存 ~/mentorpi_pc_framework/maps/{name}.{{pgm,yaml}}");
             }
             else
             {
                 var r = resp?.Result ?? -1;
-                MapControlStatus = $"[错误] 保存失败: result={r} (1=NO_MAP, 255=FAIL)";
+                return (false, $"[错误] 保存失败: result={r} (1=NO_MAP, 255=FAIL)");
             }
         }
         catch (Exception ex)
         {
-            MapControlStatus = $"[错误] 保存超时: {ex.Message}";
+            return (false, $"[错误] 保存超时: {ex.Message}");
         }
     }
 

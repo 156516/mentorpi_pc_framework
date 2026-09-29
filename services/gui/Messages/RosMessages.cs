@@ -131,3 +131,10 @@ public sealed class Transform
     public Vector3 Translation { get; set; } = new();
     public Quaternion Rotation { get; set; } = new();
 }
+
+// nav_msgs/srv/GetMap（/slam_toolbox/dynamic_map response 类型）
+// service 调用无 request 字段；response 包含当前 occupancy grid（带完整 info）
+public sealed class GetMapResponse
+{
+    public OccupancyGrid Map { get; set; } = new();
+}

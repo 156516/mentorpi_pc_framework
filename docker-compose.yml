@@ -9,6 +9,10 @@
 #   docker compose logs -f mentorpi_pc_monitor   # 看日志
 #
 # ROS_DOMAIN_ID=0 是关键，所有容器 + 树莓派在同一 DDS 域
+# 之前 ROS_DOMAIN_ID=0 用了几个月后 Fast-DDS 的 GID 缓存出现假活（Node name: _NODE_NAME_UNKNOWN_），
+# GUI 端用 /slam_toolbox/dynamic_map service 轮询绕开 /map publisher 假活问题，
+# 所以现在保持 ROS_DOMAIN_ID=0 不切。如果未来想根治 GID 假活：
+# 把所有容器 + 树莓派 ROS_DOMAIN_ID 都改成新数字（如 11），避开历史 GID 缓存污染。
 
 services:
   # 监控节点（Python）— 订阅 /odom /imu /battery，打印状态摘要
@@ -123,5 +127,5 @@ services:
       - /tmp/gui-publish:/app:rw
       # 导入地图按钮选文件：把宿主 ./maps 挂进容器 /maps（只读）
       # slam_toolbox 容器也挂同一个目录（./maps:/workspace/maps），两边共享
-      - ./maps:/maps:ro
+      - ./maps:/maps:rw
     profiles: ["gui"]                # 默认不跑：docker compose --profile gui up mentorpi_pc_gui
