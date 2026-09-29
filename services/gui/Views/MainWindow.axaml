@@ -4,7 +4,7 @@
         x:Class="MentorpiPc.Gui.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="MentorPi PC 控制台"
-        Width="900" Height="600">
+        Width="1100" Height="720">
 
   <Grid RowDefinitions="Auto,*,Auto" Margin="12">
     <!-- 顶栏：连接状态 -->
@@ -16,35 +16,54 @@
       </StackPanel>
     </Border>
 
-    <!-- 中间：状态卡片 -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0,12,0,12">
+    <!-- 中间：上半部分状态卡片，下半部分 /map -->
+    <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,12,0,12">
 
-      <!-- 电池 -->
-      <Border Grid.Column="0" Background="#FAFAFA" Padding="12" CornerRadius="4" Margin="0,0,4,0">
-        <StackPanel Spacing="6">
-          <TextBlock Text="电池" FontSize="14" Foreground="Gray" />
-          <TextBlock Text="{Binding BatteryVoltage, StringFormat='{}{0:F2} V'}" FontSize="28" FontWeight="Bold" />
-          <ProgressBar Value="{Binding BatteryPercentage}" Maximum="100" />
-        </StackPanel>
-      </Border>
+      <!-- 上半：电池 / 速度 / IMU -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,*,*" Margin="0,0,0,8">
 
-      <!-- 速度 -->
-      <Border Grid.Column="1" Background="#FAFAFA" Padding="12" CornerRadius="4" Margin="4,0">
-        <StackPanel Spacing="6">
-          <TextBlock Text="速度" FontSize="14" Foreground="Gray" />
-          <TextBlock Text="{Binding LinearVel, StringFormat='v={0:F2} m/s'}" FontSize="20" />
-          <TextBlock Text="{Binding AngularVel, StringFormat='w={0:F2} rad/s'}" FontSize="20" />
-        </StackPanel>
-      </Border>
+        <!-- 电池 -->
+        <Border Grid.Column="0" Background="#FAFAFA" Padding="12" CornerRadius="4" Margin="0,0,4,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="电池" FontSize="14" Foreground="Gray" />
+            <TextBlock Text="{Binding BatteryVoltage, StringFormat='{}{0:F2} V'}" FontSize="28" FontWeight="Bold" />
+            <ProgressBar Value="{Binding BatteryPercentage}" Maximum="100" />
+          </StackPanel>
+        </Border>
 
-      <!-- IMU -->
-      <Border Grid.Column="2" Background="#FAFAFA" Padding="12" CornerRadius="4" Margin="4,0,0,0">
-        <StackPanel Spacing="6">
-          <TextBlock Text="IMU 姿态" FontSize="14" Foreground="Gray" />
-          <TextBlock Text="{Binding ImuRoll, StringFormat='R={0:F0}°'}" FontSize="18" />
-          <TextBlock Text="{Binding ImuPitch, StringFormat='P={0:F0}°'}" FontSize="18" />
-          <TextBlock Text="{Binding ImuYaw, StringFormat='Y={0:F0}°'}" FontSize="18" />
-        </StackPanel>
+        <!-- 速度 -->
+        <Border Grid.Column="1" Background="#FAFAFA" Padding="12" CornerRadius="4" Margin="4,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="速度" FontSize="14" Foreground="Gray" />
+            <TextBlock Text="{Binding LinearVel, StringFormat='v={0:F2} m/s'}" FontSize="20" />
+            <TextBlock Text="{Binding AngularVel, StringFormat='w={0:F2} rad/s'}" FontSize="20" />
+          </StackPanel>
+        </Border>
+
+        <!-- IMU -->
+        <Border Grid.Column="2" Background="#FAFAFA" Padding="12" CornerRadius="4" Margin="4,0,0,0">
+          <StackPanel Spacing="6">
+            <TextBlock Text="IMU 姿态" FontSize="14" Foreground="Gray" />
+            <TextBlock Text="{Binding ImuRoll, StringFormat='R={0:F0}°'}" FontSize="18" />
+            <TextBlock Text="{Binding ImuPitch, StringFormat='P={0:F0}°'}" FontSize="18" />
+            <TextBlock Text="{Binding ImuYaw, StringFormat='Y={0:F0}°'}" FontSize="18" />
+          </StackPanel>
+        </Border>
+
+      </Grid>
+
+      <!-- 下半：/map 地图（来自 PC 端 slam_toolbox） -->
+      <Border Grid.Row="1" Background="#FAFAFA" Padding="8" CornerRadius="4">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top"
+                     Text="{Binding MapInfo}"
+                     FontSize="12"
+                     Foreground="Gray"
+                     Margin="0,0,0,6" />
+          <Border Background="#FFFFFF" BorderBrush="#DDDDDD" BorderThickness="1" ClipToBounds="True">
+            <Image Source="{Binding MapImage}" Stretch="Uniform" />
+          </Border>
+        </DockPanel>
       </Border>
 
     </Grid>
@@ -53,7 +72,7 @@
     <Border Grid.Row="2" Background="#F8F8F8" Padding="8" CornerRadius="4">
       <StackPanel Orientation="Horizontal" Spacing="8">
         <TextBlock Text="订阅：" Foreground="Gray" />
-        <TextBlock Text=" /odom   /imu   /ros_robot_controller/battery" />
+        <TextBlock Text=" /odom   /imu   /ros_robot_controller/battery   /map" />
       </StackPanel>
     </Border>
   </Grid>

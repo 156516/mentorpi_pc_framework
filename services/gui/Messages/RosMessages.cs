@@ -75,3 +75,20 @@ public sealed class Quaternion
     public double Z { get; set; }
     public double W { get; set; }
 }
+
+// nav_msgs/msg/OccupancyGrid（slam_toolbox /map）
+// data: int8[] —— System.Text.Json byte[] 有特殊处理（base64），所以用 sbyte[]
+//   -1 = 未知（渲染为中灰）/ 0 = 空闲（白）/ 100 = 占据（黑）
+public sealed class OccupancyGrid
+{
+    public MapMetaData Info { get; set; } = new();
+    public sbyte[] Data { get; set; } = System.Array.Empty<sbyte>();
+}
+
+public sealed class MapMetaData
+{
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public double Resolution { get; set; }
+    public Pose Origin { get; set; } = new();
+}
