@@ -39,6 +39,28 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private WriteableBitmap? _importedMapImage;
     [ObservableProperty] private string _importedMapInfo = "";
 
+    // 小车在导入地图上的实时位置（像素坐标系：左上原点）
+    // - CarPixelX/Y：地图 Image 控件内的坐标
+    // - CarYawDeg：箭头朝向（度，0=右，90=上，对应 ROS 坐标 Y 朝上）
+    // - HasCarPosition：是否已拿到有效 TF
+    [ObservableProperty] private double _carPixelX;
+    [ObservableProperty] private double _carPixelY;
+    [ObservableProperty] private double _carYawDeg;
+    [ObservableProperty] private double _carDotPixelX;  // = CarPixelX - 4（椭圆中心对准点）
+    [ObservableProperty] private double _carDotPixelY;  // = CarPixelY - 4
+    [ObservableProperty] private bool _hasCarPosition;
+
+    // 缓存最近一次的 TF（用于拼接 map → base_footprint）
+    private Transform? _mapToOdom;          // slam_toolbox 发布
+    private Transform? _odomToBaseFootprint;// ekf_filter_node 发布（接近单位变换）
+
+    // 导入地图参数（像素坐标系换算用）
+    private double _importedMapOriginX;
+    private double _importedMapOriginY;
+    private double _importedMapResolution;
+    private int _importedMapWidth;
+    private int _importedMapHeight;
+
     public MainViewModel(RosService ros)
     {
         _ros = ros;
@@ -105,6 +127,14 @@ public partial class MainViewModel : ObservableObject
         {
             // 跨线程更新 UI 属性，slam_toolbox publisher 跟 GUI 不在同一线程
             Dispatcher.UIThread.Post(() => RenderMap(msg));
+        });
+
+        // /tf 拿 map → odom（slam_toolbox 发）和 odom → base_footprint（ekf 发）
+        // 用于在地图上显示小车位置
+        await _ros.SubscribeAsync<TFMessage>(
+            "/tf", "tf2_msgs/msg/TFMessage", msg =>
+        {
+            Dispatcher.UIThread.Post(() => OnTransform(msg));
         });
     }
 
@@ -215,6 +245,7 @@ public partial class MainViewModel : ObservableObject
     /// <summary>
     /// 从磁盘 .yaml + .pgm 加载导入图（public，由 axaml.cs 的 File picker handler 调用）。
     /// 失败时抛异常 / 设 ImportedMapImage=null + 错误状态。
+    /// 成功后还会从 yaml 抽出 origin/resolution/w/h，给「地图上标小车位置」用。
     /// </summary>
     public async Task LoadMapFromFileAsync(string yamlPath, string pgmPath)
     {
@@ -225,14 +256,52 @@ public partial class MainViewModel : ObservableObject
             ImportedMapInfo = info.summary;
             ImportedMapName = Path.GetFileNameWithoutExtension(yamlPath);
             MapControlStatus = $"已导入 {ImportedMapName} {info.summary}";
+
+            // 解析 yaml 拿 origin/resolution/尺寸（用于坐标换算）
+            var meta = await Task.Run(() => ReadYamlMeta(yamlPath));
+            _importedMapOriginX = meta.originX;
+            _importedMapOriginY = meta.originY;
+            _importedMapResolution = meta.resolution;
+            _importedMapWidth = info.bmp.PixelSize.Width;
+            _importedMapHeight = info.bmp.PixelSize.Height;
+
+            // 已导入图，立刻试算一次小车位置
+            UpdateCarPosition();
         }
         catch (Exception ex)
         {
             ImportedMapImage = null;
             ImportedMapName = "";
             ImportedMapInfo = "";
+            _importedMapOriginX = 0;
+            _importedMapOriginY = 0;
+            _importedMapResolution = 0;
+            HasCarPosition = false;
             MapControlStatus = $"[错误] 导入失败: {ex.Message}";
         }
+    }
+
+    private static (double originX, double originY, double resolution) ReadYamlMeta(string yamlPath)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in File.ReadAllLines(yamlPath))
+        {
+            var t = line.Trim();
+            if (t.StartsWith("#") || string.IsNullOrEmpty(t)) continue;
+            var idx = t.IndexOf(':');
+            if (idx < 0) continue;
+            fields[t.Substring(0, idx).Trim()] = t.Substring(idx + 1).Trim();
+        }
+        double res = fields.TryGetValue("resolution", out var rs)
+            ? double.Parse(rs, System.Globalization.CultureInfo.InvariantCulture) : 0.05;
+        double ox = 0, oy = 0;
+        if (fields.TryGetValue("origin", out var orig))
+        {
+            var nums = orig.Trim('[', ']').Split(',');
+            if (nums.Length >= 1) ox = double.Parse(nums[0].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+            if (nums.Length >= 2) oy = double.Parse(nums[1].Trim(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        return (ox, oy, res);
     }
 
     private static (WriteableBitmap bmp, string summary) ParseAndRenderMap(string yamlPath, string pgmPath)
@@ -364,6 +433,83 @@ public partial class MainViewModel : ObservableObject
         MapControlStatus = string.IsNullOrEmpty(ImportedMapName)
             ? "[提示] 请先点「导入图片」选地图"
             : $"[提示] 重启加载功能待实现；请手动跑 bash mentorpi.sh load-map {ImportedMapName}";
+    }
+
+    // === /tf 缓存 + 小车位置计算 ===
+
+    private void OnTransform(TFMessage msg)
+    {
+        if (msg.Transforms is null) return;
+        bool changed = false;
+        foreach (var ts in msg.Transforms)
+        {
+            // 只缓存 map → odom 和 odom → base_footprint
+            if (ts.FrameId == "map" && ts.ChildFrameId == "odom")
+            {
+                _mapToOdom = ts.Transform;
+                changed = true;
+            }
+            else if (ts.FrameId == "odom" && ts.ChildFrameId == "base_footprint")
+            {
+                _odomToBaseFootprint = ts.Transform;
+                changed = true;
+            }
+        }
+        if (changed) UpdateCarPosition();
+    }
+
+    /// <summary>
+    /// 用 map→odom + odom→base_footprint 拼出 map→base_footprint，再换算到像素。
+    /// 没导入图时静默返回；缓存没齐时也静默返回。
+    /// </summary>
+    private void UpdateCarPosition()
+    {
+        if (_mapToOdom is null || _odomToBaseFootprint is null) return;
+        if (ImportedMapImage is null || _importedMapResolution <= 0) return;
+
+        // 拼接 map → base_footprint：先旋转 odom→base_footprint（绕 map 原点），再平移 map→odom
+        // q_total = q1 * q2（map→odom ⊗ odom→base_footprint）
+        var q1 = _mapToOdom.Rotation;
+        var q2 = _odomToBaseFootprint.Rotation;
+        double qw = q1.W * q2.W - q1.X * q2.X - q1.Y * q2.Y - q1.Z * q2.Z;
+        double qx = q1.W * q2.X + q1.X * q2.W + q1.Y * q2.Z - q1.Z * q2.Y;
+        double qy = q1.W * q2.Y - q1.X * q2.Z + q1.Y * q2.W + q1.Z * q2.X;
+        double qz = q1.W * q2.Z + q1.X * q2.Y - q1.Y * q2.X + q1.Z * q2.W;
+
+        // 平移：t_total = t1 + R1 * t2（R1 由 q1 旋转 t2）
+        // 旋转 t2 用 q1：(0, t2.x, t2.y, t2.z) ← q1 ⊗ (0, t2.x, t2.y, t2.z) ⊗ q1*
+        var t2 = _odomToBaseFootprint.Translation;
+        double tx = q1.W * t2.X + q1.Y * t2.Z - q1.Z * t2.Y;
+        double ty = q1.W * t2.Y - q1.X * t2.Z + q1.Z * t2.X;
+        double tz = q1.W * t2.Z + q1.X * t2.Y - q1.Y * t2.X;
+        // q1* (共轭：x,y,z 取负) 乘回去得到 R1*t2 的最终值
+        double rotX = qw * (-q1.X) + qx * q1.W + qy * (-q1.Z) - qz * (-q1.Y);
+        double rotY = qw * (-q1.Y) - qx * (-q1.Z) + qy * q1.W + qz * (-q1.X);
+        double rotZ = qw * (-q1.Z) + qx * (-q1.Y) - qy * (-q1.X) + qz * q1.W;
+
+        double px = _mapToOdom.Translation.X + rotX;
+        double py = _mapToOdom.Translation.Y + rotY;
+
+        // 像素坐标：
+        //   pgm_x = (pose_x - origin.x) / resolution
+        //   pgm_y = height - (pose_y - origin.y) / resolution  ← Y 翻转
+        double pgmX = (px - _importedMapOriginX) / _importedMapResolution;
+        double pgmY = _importedMapHeight - (py - _importedMapOriginY) / _importedMapResolution;
+
+        // Yaw 转角度，ROS yaw=0 → 三角箭头朝右（X+），ROS yaw=π/2 → 朝上（Y+）
+        // 像素坐标 Y 朝下，所以翻转 +90°
+        (_, _, double yawRad) = QuatToRpy(new Quaternion { X = qx, Y = qy, Z = qz, W = qw });
+        double yawDeg = yawRad * 180.0 / Math.PI;
+        // 把 ROS 朝向映射到屏幕 Canvas 的 (X 右+, Y 下+)：ROS yaw=0 箭头朝右，Canvas 旋转 0 = 朝右，
+        // 但 ROS yaw 增加是逆时针，Canvas 旋转增加是顺时针 → 取负
+        double canvasDeg = -yawDeg;
+
+        CarPixelX = pgmX;
+        CarPixelY = pgmY;
+        CarDotPixelX = pgmX - 4;  // 椭圆是 8x8，中心对准点需要 Left = X - 4
+        CarDotPixelY = pgmY - 4;
+        CarYawDeg = canvasDeg;
+        HasCarPosition = true;
     }
 
     private static (double, double, double) QuatToRpy(Quaternion q)

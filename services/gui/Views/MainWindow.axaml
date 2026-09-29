@@ -58,7 +58,7 @@
 
       </Grid>
 
-      <!-- 下半：/map 实时图（叠加在导入的参考图上） -->
+      <!-- 下半：/map 实时图（叠加在导入的参考图上） + 小车位置叠加层 -->
       <Border Grid.Row="1" Background="#FAFAFA" Padding="8" CornerRadius="4">
         <DockPanel>
           <TextBlock DockPanel.Dock="Top"
@@ -67,13 +67,39 @@
                      Foreground="Gray"
                      Margin="0,0,0,6" />
           <Border Background="#FFFFFF" BorderBrush="#DDDDDD" BorderThickness="1" ClipToBounds="True">
-            <!-- Grid 叠两层 Image：底层导入参考图（半透明），上层实时 /map -->
-            <Grid>
-              <Image Source="{Binding ImportedMapImage}"
-                     Stretch="Uniform"
-                     Opacity="0.5" />
-              <Image Source="{Binding MapImage}" Stretch="Uniform" />
-            </Grid>
+            <!-- Viewbox 按 Uniform 缩放内部 Grid；内部 Grid 用 bitmap 实际宽高（导入图决定） -->
+            <Viewbox Stretch="Uniform" StretchDirection="Both">
+              <Grid Width="{Binding ImportedMapWidth, FallbackValue=100}"
+                    Height="{Binding ImportedMapHeight, FallbackValue=100}"
+                    Background="Transparent">
+                <!-- 底层：导入参考图（半透明） -->
+                <Image Source="{Binding ImportedMapImage}" Stretch="Fill" Opacity="0.5" />
+                <!-- 中层：实时 /map -->
+                <Image Source="{Binding MapImage}" Stretch="Fill" />
+                <!-- 顶层：小车位置（三角形箭头 + 中心点） -->
+                <Canvas>
+                  <Polygon Points="0,-14 12,10 -12,10"
+                           Fill="#E63946"
+                           Stroke="White"
+                           StrokeThickness="2"
+                           Canvas.Left="{Binding CarPixelX}"
+                           Canvas.Top="{Binding CarPixelY}"
+                           IsVisible="{Binding HasCarPosition}">
+                    <Polygon.RenderTransform>
+                      <RotateTransform Angle="{Binding CarYawDeg}" />
+                    </Polygon.RenderTransform>
+                  </Polygon>
+                  <!-- 小车位置中心点（4px 半径 8px 直径） -->
+                  <Ellipse Width="8" Height="8"
+                           Fill="White"
+                           Stroke="#E63946"
+                           StrokeThickness="2"
+                           Canvas.Left="{Binding CarDotPixelX}"
+                           Canvas.Top="{Binding CarDotPixelY}"
+                           IsVisible="{Binding HasCarPosition}" />
+                </Canvas>
+              </Grid>
+            </Viewbox>
           </Border>
         </DockPanel>
       </Border>

@@ -111,3 +111,23 @@ public sealed class SaveMapResponse
 {
     public int Result { get; set; }
 }
+
+// tf2_msgs/msg/TFMessage（/tf + /tf_static 通用结构）
+// transforms[]：每条是 base_frame → child_frame 的 6DOF 位姿
+public sealed class TFMessage
+{
+    public TransformStamped[] Transforms { get; set; } = System.Array.Empty<TransformStamped>();
+}
+
+public sealed class TransformStamped
+{
+    public string FrameId { get; set; } = "";        // 父坐标系
+    public string ChildFrameId { get; set; } = "";  // 子坐标系
+    public Transform Transform { get; set; } = new();
+}
+
+public sealed class Transform
+{
+    public Vector3 Translation { get; set; } = new();
+    public Quaternion Rotation { get; set; } = new();
+}
