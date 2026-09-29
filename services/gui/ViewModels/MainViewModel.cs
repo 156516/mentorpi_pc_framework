@@ -314,10 +314,10 @@ public partial class MainViewModel : ObservableObject
         int maxval = int.Parse(ReadToken(fs), System.Globalization.CultureInfo.InvariantCulture);
         if (maxval != 255)
             throw new InvalidDataException($"只支持 maxval=255，当前 {maxval}");
-        // 一个空白后就是像素
-        fs.ReadByte();
-        var data = new byte[w * h];
+        // ReadToken 已经把 maxval 后的空白跳过了——fs.Position 已经在第一个像素位置。
+        // 别再 fs.ReadByte()，那会多吃 1 字节（导致 "像素数据不足: N-1/N"）。
         int read = 0;
+        var data = new byte[w * h];
         while (read < data.Length)
         {
             int n = fs.Read(data, read, data.Length - read);

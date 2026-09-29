@@ -117,4 +117,7 @@ services:
       # 在宿主跑：cd services/gui && dotnet publish -c Release -o /tmp/gui-publish
       # 然后 restart 容器即可生效（无需 rebuild GUI 镜像）
       - /tmp/gui-publish:/app:rw
+      # 导入地图按钮选文件：把宿主 ./maps 挂进容器 /maps（只读）
+      # slam_toolbox 容器也挂同一个目录（./maps:/workspace/maps），两边共享
+      - ./maps:/maps:ro
     profiles: ["gui"]                # 默认不跑：docker compose --profile gui up mentorpi_pc_gui
