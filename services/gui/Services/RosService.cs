@@ -87,10 +87,22 @@ public sealed class RosService : IAsyncDisposable
     /// 调 ROS service（通过 rosbridge op:"call_service"）。
     /// args 是 service request 的 JSON 表示（如 new { name = new { data = "/workspace/maps/room1" } }）。
     /// 返回 (result, values)：result=true 成功，values 是反序列化后的 TResp 对象（失败时为 null）。
-    /// 默认超时 10s。
+    /// 默认超时 30s（dynamic_map 这种带 56KB occupancy grid response 的需要）。
     /// </summary>
     public async Task<(bool Result, TResp? Values)> CallServiceAsync<TResp>(
         string service, object args, CancellationToken ct = default)
+        where TResp : class, new()
+    {
+        return await CallServiceAsync<TResp>(service, null, args, ct);
+    }
+
+    /// <summary>
+    /// 同上，但显式传 type 字符串（rosbridge 用它解析 response 类型）。
+    /// 对于 slam_toolbox/* service 必须传 type=nav_msgs/srv/GetMap（或类似的 std 类型），
+    /// 否则 rosbridge 会 import slam_toolbox 模块导致失败（容器里没装）。
+    /// </summary>
+    public async Task<(bool Result, TResp? Values)> CallServiceAsync<TResp>(
+        string service, string? type, object args, CancellationToken ct = default)
         where TResp : class, new()
     {
         var id = Guid.NewGuid().ToString();
@@ -99,16 +111,13 @@ public sealed class RosService : IAsyncDisposable
 
         try
         {
-            await SendAsync(new
-            {
-                op = "call_service",
-                service,
-                id,
-                args,
-            });
+            object payload = type is null
+                ? new { op = "call_service", service, id, args }
+                : new { op = "call_service", service, type, id, args };
+            await SendAsync(payload);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
             var resp = await tcs.Task.WaitAsync(timeoutCts.Token);
 
             TResp? values = null;

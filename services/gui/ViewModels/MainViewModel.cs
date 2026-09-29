@@ -101,93 +101,61 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 启动实时图轮询：每 5s 调一次 /slam_toolbox/dynamic_map service（nav_msgs/srv/GetMap），
-    /// response 里直接包含 nav_msgs/OccupancyGrid（带 info.origin = map→odom）。
-    /// 这样绕开 /map publisher GID 假活问题——service 能响应，且能同时拿到：
-    ///   1. 当前 occupancy grid 渲染成 bitmap（实时图叠加层）
-    ///   2. map→odom 变换 → 跟 /odom pose 拼接算出 base_footprint 在 map 中的位置（红三角）
-    /// 频率 5s 跟 slam_toolbox yaml 的 map_update_interval 匹配。
+    /// 启动实时图轮询：每 8s 调一次 /slam_toolbox/save_map（写文件到 /workspace/maps/realtime.{pgm,yaml}）。
+    /// 然后 GUI 读这两个文件渲染为 bitmap 显示。
+    ///
+    /// 不用 dynamic_map 是因为它响应不稳定（service 卡 20 秒）。save_map 是稳定的（之前测过 1-3 秒响应）。
+    /// 频率 8s 比 slam_toolbox yaml 的 map_update_interval (5s) 慢一点，避开 save_map 阻塞期间还没新数据。
     /// </summary>
     private void StartRealtimeMapPolling()
     {
-        _realtimePollTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _realtimePollTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _realtimePollTimer.Tick -= OnRealtimePollTick;
         _realtimePollTimer.Tick += OnRealtimePollTick;
         _realtimePollTimer.Start();
-        // 立即跑一次（不等 5s）
+        MapControlStatus = "实时图轮询启动（save_map 8s 一次）";
         Dispatcher.UIThread.Post(() => OnRealtimePollTick(null, EventArgs.Empty));
     }
 
+    private int _realtimeTickCount = 0;
+
     private async void OnRealtimePollTick(object? sender, EventArgs e)
     {
+        _realtimeTickCount++;
         try
         {
-            // dynamic_map service 的 request 是空的，传 {}
-            var (ok, resp) = await _ros.CallServiceAsync<GetMapResponse>(
-                "/slam_toolbox/dynamic_map", new { });
-            if (!ok || resp?.Map is null) return;
-            var grid = resp.Map;
-            int w = grid.Info.Width, h = grid.Info.Height;
-            if (w <= 0 || h <= 0 || grid.Data.Length != w * h) return;
+            var (ok, _) = await CallSaveMapAsync(RealtimeMapBaseName);
+            if (!ok || !File.Exists(RealtimeYamlPath) || !File.Exists(RealtimePgmPath))
+            {
+                MapControlStatus = $"轮询 #{_realtimeTickCount} save_map 失败";
+                return;
+            }
 
             // 渲染为 bitmap（异步执行避免阻塞 UI）
-            var (bmp, summary) = await Task.Run(() => RenderMapFromGrid(grid));
-            RealtimeMapImage = bmp;
-            RealtimeMapInfo = summary;
+            var info = await Task.Run(() => ParseAndRenderMap(RealtimeYamlPath, RealtimePgmPath));
+            RealtimeMapImage = info.bmp;
+            RealtimeMapInfo = info.summary;
 
-            // 缓存 map → odom（用于算红三角位置）
-            // info.origin 是 geometry_msgs/Pose（直接子字段 position + orientation），
-            // 它表示「地图左下角在物理世界的位置」= slam_toolbox 当前估计的 map→odom 平移/旋转
+            // save_map 写的 yaml.origin 是 slam_toolbox 当前估计的「map→odom 平移」。
+            // 重新读 yaml 拿这个 origin（不读 _importedMapOrigin，那是导入图的，跟实时图无关）
+            var meta = await Task.Run(() => ReadYamlMeta(RealtimeYamlPath));
             _mapToOdom = new Transform
             {
                 Translation = new Vector3
                 {
-                    X = grid.Info.Origin.Position.X,
-                    Y = grid.Info.Origin.Position.Y,
-                    Z = grid.Info.Origin.Position.Z,
+                    X = meta.originX,
+                    Y = meta.originY,
+                    Z = 0,
                 },
-                Rotation = grid.Info.Origin.Orientation,
+                Rotation = new Quaternion { W = 1 },
             };
-            // 尝试更新红三角位置
             UpdateCarPosition();
+            MapControlStatus = $"实时图 #{_realtimeTickCount} OK: {info.summary}";
         }
-        catch
+        catch (Exception ex)
         {
-            // 网络层偶尔会掩盖超时，忽略
+            MapControlStatus = $"[错误] 轮询 #{_realtimeTickCount} 失败: {ex.Message}";
         }
-    }
-
-    /// <summary>
-    /// 把 nav_msgs/OccupancyGrid 渲染成 Bgra8888 bitmap（不读 .pgm 文件，纯内存）。
-    /// 跟 RenderMap 用同一套像素映射。
-    /// </summary>
-    private static (WriteableBitmap bmp, string summary) RenderMapFromGrid(OccupancyGrid grid)
-    {
-        var info = grid.Info;
-        int w = info.Width;
-        int h = info.Height;
-        var bmp = new WriteableBitmap(
-            new Avalonia.PixelSize(w, h),
-            new Avalonia.Vector(96, 96),
-            Avalonia.Platform.PixelFormat.Bgra8888,
-            Avalonia.Platform.AlphaFormat.Unpremul);
-        using (var fb = bmp.Lock())
-        {
-            var pixels = new int[w * h];
-            for (int i = 0; i < pixels.Length; i++)
-            {
-                int v = grid.Data[i];
-                int argb;
-                if (v < 0)        argb = unchecked((int)0xFF808080);
-                else if (v == 0)  argb = unchecked((int)0xFFFFFFFF);
-                else if (v >= 100) argb = unchecked((int)0xFF000000);
-                else              argb = unchecked((int)0xFF000000 | ((255 - v * 255 / 100) * 0x010101));
-                pixels[i] = argb;
-            }
-            Marshal.Copy(pixels, 0, fb.Address, pixels.Length);
-        }
-        var summary = $"{w}x{h} @ {info.Resolution:F3} m/px";
-        return (bmp, summary);
     }
 
     private async Task SubscribeTopicsAsync()
