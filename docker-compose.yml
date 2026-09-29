@@ -74,6 +74,10 @@ services:
       - ROS_DOMAIN_ID=0
     volumes:
       - ./maps:/workspace/maps        # 地图保存目录挂到宿主的 ./maps
+      # 开发模式：宿主 launch/config 直接覆盖容器 install 目录（--symlink-install 已建好符号链接链）
+      # 改 modules/mentorpi_pc_slam_toolbox/launch/*.py 不用 docker build，restart 容器即生效
+      - ./modules/mentorpi_pc_slam_toolbox/launch:/workspace/install/mentorpi_pc_slam_toolbox/share/mentorpi_pc_slam_toolbox/launch:ro
+      - ./modules/mentorpi_pc_slam_toolbox/config:/workspace/install/mentorpi_pc_slam_toolbox/share/mentorpi_pc_slam_toolbox/config:ro
     profiles: ["slam"]                # 默认不跑：bash mentorpi.sh slam
 
   # rosbridge — WebSocket 桥，让非 ROS2 客户端（Web/C#/JS）能订阅 ROS2 话题
