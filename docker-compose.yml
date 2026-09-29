@@ -113,4 +113,8 @@ services:
       # 不挂载宿主 ~/.Xauthority（Wayland 下该文件可能为空），
       # 而是让 mentorpi.sh 把宿主真实的 Xauthority 复制到 /tmp/.docker-xauth 再挂进来
       - /tmp/.docker-xauth:/tmp/.docker-xauth:ro
+      # 开发模式：宿主 publish 出来的 Release 直接覆盖容器 /app，避开 docker build 拉 NuGet
+      # 在宿主跑：cd services/gui && dotnet publish -c Release -o /tmp/gui-publish
+      # 然后 restart 容器即可生效（无需 rebuild GUI 镜像）
+      - /tmp/gui-publish:/app:rw
     profiles: ["gui"]                # 默认不跑：docker compose --profile gui up mentorpi_pc_gui
