@@ -1,0 +1,39 @@
+<launch>
+  <!-- rosbridge 默认单线程处理 service call，慢 service 会阻塞所有 ws 消息。
+       这里显式启用多线程 + 设置 timeout，避免 dynamic_map 等大 service 阻塞主线程。 -->
+  <arg name="port"             default="9090" />
+  <arg name="address"          default="" />
+  <arg name="ssl"              default="false" />
+  <arg name="certfile"         default="" />
+  <arg name="keyfile"          default="" />
+  <arg name="cert_reqs"        default="CERT_NONE" />
+  <arg name="ssl_version"      default="TLSv1_2" />
+  <arg name="ca_certs"         default="" />
+  <arg name="fragment_timeout" default="600" />
+  <arg name="delay_between_messages" default="0.0" />
+  <arg name="max_message_size" default="100000000" />
+  <arg name="authenticate"     default="false" />
+
+  <!-- 关键：多线程处理 service call + 默认超时 -->
+  <arg name="call_services_in_new_thread" default="True" />
+  <arg name="default_call_service_timeout" default="60.0" />
+
+  <node pkg="rosbridge_server" exec="rosbridge_websocket" name="rosbridge_websocket"
+        output="log" respawn="false" >
+    <param name="port"               value="$(var port)" />
+    <param name="address"            value="$(var address)" />
+    <param name="ssl"                value="$(var ssl)" />
+    <param name="certfile"           value="$(var certfile)" />
+    <param name="keyfile"            value="$(var keyfile)" />
+    <param name="cert_reqs"          value="$(var cert_reqs)" />
+    <param name="ssl_version"        value="$(var ssl_version)" />
+    <param name="ca_certs"           value="$(var ca_certs)" />
+    <param name="fragment_timeout"   value="$(var fragment_timeout)" />
+    <param name="delay_between_messages" value="$(var delay_between_messages)" />
+    <param name="max_message_size"   value="$(var max_message_size)" />
+    <param name="call_services_in_new_thread" value="$(var call_services_in_new_thread)" />
+    <param name="default_call_service_timeout" value="$(var default_call_service_timeout)" />
+  </node>
+
+  <node pkg="rosapi" exec="rosapi_node" name="rosapi_node" output="log" respawn="false" />
+</launch>
